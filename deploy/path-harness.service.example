@@ -8,6 +8,7 @@ WorkingDirectory=/opt/path-harness-site
 Environment=HOST=0.0.0.0
 Environment=PORT=8769
 Environment=DB_PATH=/opt/path-harness-site/data/path_harness.sqlite
+EnvironmentFile=-/etc/navigator-invest/path-harness.env
 ExecStart=/usr/bin/env bash /opt/path-harness-site/scripts/run_server.sh
 Restart=always
 RestartSec=3

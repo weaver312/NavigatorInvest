@@ -186,6 +186,25 @@
       "notes": "只消费信号，不产生交易动作；webhook 明文必须留在环境变量或密钥库。"
     },
     {
+      "id": "consumer_discord_navigator_signals",
+      "name": "Navigator Discord 信号频道",
+      "channel_type": "discord_webhook",
+      "consumer_stage": "notify",
+      "signal_contract": "path_signal_v1 compact_card: signal_id, path_application_id, symbol, side, confidence, trigger_snapshot, risk_state, runtime_metrics",
+      "input_sources": "consumer_signal_audit_log, path_application, path_instance",
+      "output_sink_ref": "env:DISCORD_NAVIGATOR_WEBHOOK_URL",
+      "delivery_mode": "async_http_post",
+      "idempotency_rule": "signal_id + channel_id 唯一；重试复用同一 record_id，不重复发送同一信号。",
+      "risk_gate": "notify_only",
+      "allowed_actions": "send_path_signal_alert, send_runtime_error, send_daily_digest",
+      "audit_policy": "发送前后都写 signal_consumption_record；保存 payload_ref、HTTP 状态、elapsed_ms 和错误摘要。",
+      "latency_slo": "< 5s after signal audit",
+      "failure_policy": "失败重试 2 次；仍失败则标记 failed，不触发任何交易动作。",
+      "owner_agent": "agent_market_state_monitor",
+      "status": "active",
+      "notes": "用户提供的 Navigator Invest Discord webhook 已配置到服务器环境变量；仓库和数据库只保存 env 引用。"
+    },
+    {
       "id": "consumer_paper_portfolio",
       "name": "模拟仓执行",
       "channel_type": "paper_trade",

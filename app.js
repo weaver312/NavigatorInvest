@@ -345,7 +345,7 @@ const pathInstanceRows = [];
 const consumerChannelDefinitionSchema = [
   ["id", "消费渠道定义唯一 ID。"],
   ["name", "渠道名称。"],
-  ["channel_type", "消费类型：audit_log、notification、paper_trade、live_trade、webhook、review_queue。"],
+  ["channel_type", "消费类型：audit_log、notification、discord_webhook、paper_trade、live_trade、webhook、review_queue。"],
   ["consumer_stage", "消费发生在信号生命周期的哪个阶段：记录、通知、模拟成交、实盘下单、人工复核。"],
   ["signal_contract", "该渠道接受的信号契约和最小字段。"],
   ["input_sources", "允许消费哪些上游输出，例如 path_application、path_instance、Agent 输出。"],
@@ -419,6 +419,25 @@ const consumerChannelDefinitionRows = [
     owner_agent: "agent_market_state_monitor",
     status: "planned",
     notes: "只消费信号，不产生交易动作；webhook 明文必须留在环境变量或密钥库。",
+  },
+  {
+    id: "consumer_discord_navigator_signals",
+    name: "Navigator Discord 信号频道",
+    channel_type: "discord_webhook",
+    consumer_stage: "notify",
+    signal_contract: "path_signal_v1 compact_card: signal_id, path_application_id, symbol, side, confidence, trigger_snapshot, risk_state, runtime_metrics",
+    input_sources: "consumer_signal_audit_log, path_application, path_instance",
+    output_sink_ref: "env:DISCORD_NAVIGATOR_WEBHOOK_URL",
+    delivery_mode: "async_http_post",
+    idempotency_rule: "signal_id + channel_id 唯一；重试复用同一 record_id，不重复发送同一信号。",
+    risk_gate: "notify_only",
+    allowed_actions: "send_path_signal_alert, send_runtime_error, send_daily_digest",
+    audit_policy: "发送前后都写 signal_consumption_record；保存 payload_ref、HTTP 状态、elapsed_ms 和错误摘要。",
+    latency_slo: "< 5s after signal audit",
+    failure_policy: "失败重试 2 次；仍失败则标记 failed，不触发任何交易动作。",
+    owner_agent: "agent_market_state_monitor",
+    status: "active",
+    notes: "用户提供的 Navigator Invest Discord webhook 已配置到服务器环境变量；仓库和数据库只保存 env 引用。",
   },
   {
     id: "consumer_paper_portfolio",
@@ -1268,7 +1287,7 @@ const metrics = {
     ["人工审查", "AI 只提候选，交易员决定是否入库"],
   ],
   consumers: [
-    ["4 类", "日志、通知、模拟仓、实盘审批"],
+    ["5 个", "审计日志、Discord、模拟仓、实盘审批等渠道"],
     ["Signal", "消费 Path Runtime 的输出信号"],
     ["幂等", "同一信号不能重复通知或重复下单"],
     ["审计优先", "任何下游动作都要先落记录"],
@@ -1358,6 +1377,12 @@ const runtimeVariableRegistry = {
     status: "已登记",
     maskedValue: "https://discord.com/api/webhooks/********",
     note: "Discord webhook URL。页面只显示脱敏值，不保存明文 webhook。",
+  },
+  "env:DISCORD_NAVIGATOR_WEBHOOK_URL": {
+    kind: "环境变量",
+    status: "已登记",
+    maskedValue: "https://discord.com/api/webhooks/********/********",
+    note: "Navigator Invest 专用 Discord webhook。服务器保存明文环境变量，页面只显示脱敏值。",
   },
   "config:BROKER_ORDER_API": {
     kind: "配置项",
@@ -3571,7 +3596,7 @@ function renderPathDrawer(record) {
         <button class="icon-button" type="button" data-close-path-drawer aria-label="关闭抽屉">×</button>
       </div>
       <div class="path-drawer-body">
-        <div class="path-record-summary">
+        <div class="path-record-summary path-summary-compact">
           ${renderPathRecordSummary(record)}
         </div>
         <div class="path-canvas-shell">
@@ -3597,39 +3622,40 @@ function renderPathRecordSummary(record) {
   if (state.pathEntity === "definition") {
     const applications = pathApplicationsForDefinition(record.id);
     const applicationStatus = applications.length
-      ? applications.map((app) => `${app.target_symbol}: ${app.runtime_state} (${app.monitor_script})`).join("；")
+      ? applications.map((app) => `${app.target_symbol} · ${app.runtime_state}`).join("；")
       : "暂无应用";
     rows = [
-      ["状态", record.status],
-      ["Path 家族", record.path_family],
-      ["应用状态", applicationStatus],
-      ["资金假设", record.flow_hypothesis],
-      ["失效条件", record.invalidation_rule],
+      { label: "状态", value: record.status, field: "status", kind: "compact" },
+      { label: "Path 家族", value: record.path_family, kind: "compact" },
+      { label: "应用状态", value: applicationStatus, kind: "wide" },
+      { label: "资金假设", value: record.flow_hypothesis, kind: "full" },
+      { label: "失效条件", value: record.invalidation_rule, kind: "full" },
     ];
   } else if (state.pathEntity === "application") {
     rows = [
-      ["状态", record.runtime_state],
-      ["目标标的", record.target_symbol],
-      ["Path 定义", record.path_definition_id],
-      ["监听代码", record.monitor_script],
-      ["心跳", record.heartbeat_ref],
-      ["PID", record.pid_ref],
+      { label: "状态", value: record.runtime_state, field: "runtime_state", kind: "compact" },
+      { label: "目标标的", value: record.target_symbol, kind: "compact" },
+      { label: "运行模式", value: record.run_mode, kind: "wide" },
+      { label: "Path 定义", value: record.path_definition_id, field: "path_definition_id", kind: "full" },
+      { label: "监听代码", value: record.monitor_script, kind: "full" },
+      { label: "心跳", value: record.heartbeat_ref, kind: "full" },
+      { label: "PID", value: record.pid_ref, kind: "full" },
     ];
   } else {
     rows = [
-      ["状态", record.activation_state],
-      ["标的", record.symbols],
-      ["当前节点", record.current_node_id],
-      ["人工复盘", record.human_review_state],
+      { label: "状态", value: record.activation_state, field: "activation_state", kind: "compact" },
+      { label: "标的", value: record.symbols, kind: "compact" },
+      { label: "当前节点", value: record.current_node_id, kind: "wide" },
+      { label: "人工复盘", value: record.human_review_state, field: "human_review_state", kind: "compact" },
     ];
   }
 
   return rows
     .map(
-      ([label, value]) => `
-        <div>
-          <strong>${label}</strong>
-          <span>${formatCell(value)}</span>
+      ({ label, value, field = "", kind = "wide" }) => `
+        <div class="path-summary-item ${kind}" title="${escapeAttr(value === undefined || value === null ? "" : String(value))}">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${formatCell(value, field)}</span>
         </div>
       `,
     )
