@@ -1,6 +1,6 @@
-# 横纵坐标 Path Harness 0.1 alpha
+# Navigator Invest 0.1 alpha
 
-这是横纵坐标 / Path Harness 的 0.1 alpha。当前版本已经包含本地后端、SQLite 数据库、实体 spec、前端页面和 API bootstrap。
+这是 Navigator Invest 的 0.1 alpha。当前版本已经包含本地后端、SQLite 数据库、实体 spec、前端页面和 API bootstrap。
 
 启动方式：
 
