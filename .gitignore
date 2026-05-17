@@ -5,6 +5,7 @@ __pycache__/
 # Runtime database; regenerate from data/seed_data.json on first boot.
 data/*.sqlite
 data/*.sqlite-*
+runtime/
 
 # Local visual QA captures.
 screenshot-*.png

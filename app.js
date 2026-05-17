@@ -5,6 +5,8 @@ const icons = {
     '<svg viewBox="0 0 24 24"><path d="M12 4v16"/><path d="m8 8 4-4 4 4"/><path d="m8 16 4 4 4-4"/></svg>',
   path:
     '<svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 6h3a4 4 0 0 1 4 4v4a4 4 0 0 0 4 4"/></svg>',
+  consumer:
+    '<svg viewBox="0 0 24 24"><path d="M4 5h9"/><path d="M4 12h7"/><path d="M4 19h9"/><path d="M15 8l4 4-4 4"/><path d="M11 12h8"/></svg>',
   agent:
     '<svg viewBox="0 0 24 24"><path d="M12 4v3"/><rect x="6" y="7" width="12" height="10" rx="3"/><path d="M9 17v3"/><path d="M15 17v3"/><path d="M8 11h.01"/><path d="M16 11h.01"/><path d="M9 14h6"/></svg>',
   data:
@@ -17,6 +19,7 @@ const navItems = [
   { key: "horizontal", label: "横坐标库", icon: icons.horizontal },
   { key: "vertical", label: "纵坐标库", icon: icons.vertical },
   { key: "paths", label: "Path管理", icon: icons.path },
+  { key: "consumers", label: "消费渠道管理", icon: icons.consumer },
   { key: "agents", label: "AI Agent接入管理", icon: icons.agent },
   { key: "sources", label: "数据源接入管理", icon: icons.data },
   { key: "spec", label: "实体关系图 / Spec", icon: icons.schema },
@@ -43,7 +46,6 @@ const horizontalDefinitionSchema = [
   ["known_at_rule", "当时是否已知，用来防未来函数。"],
   ["recurrence", "发生频率：每日、每周、每月、事件驱动、不规则。"],
   ["market_scope", "适用市场：美股、BTC、A股、港股、全球宏观。"],
-  ["symbol_scope", "适用标的或股票池：SPY/QQQ、明星股、币股、慢性股。"],
   ["flow_tags", "可能关联的资金状态：强平、回补、被动减持、风险重定价。"],
   ["linked_vertical_types", "常生成或关联的纵坐标类型。"],
   ["data_requirements", "运行它需要哪些数据。"],
@@ -71,82 +73,29 @@ const horizontalOccurrenceSchema = [
 
 const horizontalDefinitionRows = [
   {
-    id: "hc_tsll_pre_entry_ab_measure_window",
-    name: "TSLL A/B测量窗口",
+    id: "hc_power_hour_1435_1500_observation",
+    name: "14:35-15:00数据观察窗口",
     category: "日内",
     coordinate_type: "时间窗口",
-    definition: "美股常规交易日尾盘，从 14:35 ET 开始到 15:00 ET 首笔入场前，用 TSLL 逐笔成交提取 A/B/C 价格结构。",
-    original_time_text: "14:35-15:00 ET before first entry tick",
+    definition: "美股常规交易日 14:35-15:00 ET 的数据观察窗口：14:35-14:50 ET 用来生成参考高点；14:50-15:00 ET 用 1分钟K线寻找固定窗口末分钟信号和 VWAP 深度偏离上拐信号；信号分钟收完后，下一分钟第一笔逐笔成交才可入场。",
+    original_time_text: "14:35-15:00 ET",
     time_basis: "ET",
     timezone: "America/New_York",
     dst_policy: "跟随美股夏令时/冬令时",
     anchor: "regular_session_close - power_hour",
     start_rule: "regular_session 14:35 ET",
-    end_rule: "first TSLL trade at or after 15:00 ET",
-    known_at_rule: "只使用 15:00 ET 入场前已经发生的逐笔成交；不得使用入场后的高低点。",
+    end_rule: "regular_session 14:59 ET signal bar, followed by next-minute first tick execution",
+    known_at_rule: "14:35-14:50 参考高点在 14:50 ET 已知；每个候选信号只在对应 1分钟K线收完后才可确认；固定窗口末分钟信号在 14:59 bar 收完后确认，VWAP 上拐信号在触发分钟收完后确认。",
     recurrence: "每个美股常规交易日",
     market_scope: "US equities",
-    symbol_scope: "TSLL",
-    flow_tags: "尾盘抛压, 杠杆ETF, 回补, liquidity_reclaim",
-    linked_vertical_types: "vc_tsll_ab_a_pre_entry_high, vc_tsll_ab_b_entry_price, vc_tsll_ab_c_pre_entry_low, vc_tsll_ab_gap_filter, vc_tsll_ab_reclaim_tp_sl",
-    data_requirements: "TSLL tick trades from 14:35 ET through first tick after 15:00 ET",
-    check_frequency: "tick during 14:35-15:00 ET",
-    evidence_count: "power_hour_lab aggregate: 209 A/B trades after skip filter",
+    flow_tags: "power_hour, 小V反弹, fixed_end, vwap_turn",
+    linked_vertical_types: "vc_vwap_deep_deviation, vc_pre_entry_2m_range_filter, vc_entry_pullback_within_1pct",
+    data_requirements: "1m OHLCV bars from 09:30 ET for VWAP and 14:35-14:50 reference high; tick trades for next-minute first-tick entry",
+    check_frequency: "1m during 14:35-15:00 ET; tick only at execution",
+    evidence_count: "power_hour_lab baseline candidate",
     confidence: "已回测候选",
     status: "review",
-    notes: "来源 /tmp/bc_power_hour_web/analysis.json；用于计算 A/B/C 和动态回补目标。",
-  },
-  {
-    id: "hc_tsll_power_hour_1450_window",
-    name: "TSLL 14:50尾盘窗口",
-    category: "日内",
-    coordinate_type: "时间窗口",
-    definition: "TSLL 尾盘 14:50-15:00 ET 观察窗口，窗口末分钟收完后生成固定窗口信号。",
-    original_time_text: "14:50-15:00 ET",
-    time_basis: "ET",
-    timezone: "America/New_York",
-    dst_policy: "跟随美股夏令时/冬令时",
-    anchor: "regular_session_close - power_hour",
-    start_rule: "regular_session 14:50 ET",
-    end_rule: "regular_session 15:00 ET",
-    known_at_rule: "14:59 这一根 1m bar 收完后才可确认，不早于 15:00 ET 入场。",
-    recurrence: "每个美股常规交易日",
-    market_scope: "US equities",
-    symbol_scope: "TSLL",
-    flow_tags: "尾盘抛压, 强平, 回补, reversal",
-    linked_vertical_types: "vc_tsll_ab_b_entry_price, vc_tsll_ab_reclaim_tp_sl",
-    data_requirements: "TSLL 1m bars, TSLL tick trades",
-    check_frequency: "1m during 14:50-15:00 ET",
-    evidence_count: "power_hour_lab fixed_end sample around 244 trades",
-    confidence: "已回测候选",
-    status: "review",
-    notes: "固定窗口末分钟规则：窗口最后一分钟收完，下一分钟按逐笔成交入场。",
-  },
-  {
-    id: "hc_tsll_entry_first_tick_1500",
-    name: "TSLL 15:00首笔入场点",
-    category: "日内",
-    coordinate_type: "时间点",
-    definition: "15:00 ET 到达后 TSLL 的第一笔可用逐笔成交，作为 B 价格和回补 Path 的入场锚点。",
-    original_time_text: "15:00 first tick ET",
-    time_basis: "ET",
-    timezone: "America/New_York",
-    dst_policy: "跟随美股夏令时/冬令时",
-    anchor: "regular_session 15:00 ET",
-    start_rule: "first TSLL trade timestamp >= 15:00 ET",
-    end_rule: "same tick",
-    known_at_rule: "该 tick 到达后立即已知；B 价格取该 tick 成交价。",
-    recurrence: "每个美股常规交易日",
-    market_scope: "US equities",
-    symbol_scope: "TSLL",
-    flow_tags: "entry_anchor, liquidity_reclaim",
-    linked_vertical_types: "vc_tsll_ab_b_entry_price, vc_tsll_ab_gap_filter, vc_tsll_ab_reclaim_tp_sl",
-    data_requirements: "TSLL tick trades",
-    check_frequency: "tick after 15:00 ET",
-    evidence_count: "power_hour_lab A/B reclaim rows",
-    confidence: "已回测候选",
-    status: "review",
-    notes: "这是入场坐标，不代表交易建议；后续由验证/人工复核决定是否启用。",
+    notes: "这是该短策略唯一横坐标；14:35-14:50 是参考高点窗口，14:50-15:00 是信号窗口；入场执行、TP/SL 和同日去重属于 Path 内部规则，不拆成横坐标。",
   },
 ];
 
@@ -164,7 +113,6 @@ const verticalDefinitionSchema = [
   ["computation_method", "计算方式，例如 first_low_retest、event_midpoint、base_price * 0.98。"],
   ["source_window_rule", "从哪个时间窗口取价格，例如第一低点后半小时、财报后 3 天、15:00-15:30 ET。"],
   ["required_horizontal_ids", "依赖哪些横坐标定义或实例。"],
-  ["symbol_scope", "适用标的或股票池。"],
   ["market_scope", "适用市场。"],
   ["input_data", "需要的输入数据：分钟线、盘前、期权、IV、BTC websocket、公告。"],
   ["value_unit", "数值单位：price、percent、premium、iv、volume。"],
@@ -201,119 +149,70 @@ const verticalOccurrenceSchema = [
 
 const verticalDefinitionRows = [
   {
-    id: "vc_tsll_ab_a_pre_entry_high",
-    name: "TSLL A价",
-    category: "高点",
-    coordinate_type: "高点",
-    price_domain: "stock_price",
-    definition: "A 价：TSLL 在 14:35 ET 到 15:00 后首笔入场前的逐笔成交最高价。",
-    computation_method: "max(trade_price) over hc_tsll_pre_entry_ab_measure_window",
-    source_window_rule: "hc_tsll_pre_entry_ab_measure_window",
-    required_horizontal_ids: "hc_tsll_pre_entry_ab_measure_window",
-    symbol_scope: "TSLL",
-    market_scope: "US equities",
-    input_data: "TSLL tick trades",
-    value_unit: "price",
-    valid_from_rule: "15:00 ET first tick known",
-    valid_until_rule: "same trading session close or path invalidation",
-    invalidated_by: "missing tick data, market halt, split/adjustment mismatch",
-    flow_tags: "pre_entry_high, reclaim_reference",
-    evidence_count: "power_hour_lab A/B reclaim",
-    confidence: "已回测候选",
-    status: "review",
-    notes: "用于计算 A/B gap；A 比 B 高 1% 及以上时跳过。",
-  },
-  {
-    id: "vc_tsll_ab_b_entry_price",
-    name: "TSLL B价",
-    category: "入场价",
-    coordinate_type: "价格点",
-    price_domain: "stock_price",
-    definition: "B 价：15:00 ET 到达后 TSLL 第一笔逐笔成交价，也是 A/B 回补 Path 的入场锚点。",
-    computation_method: "first_trade_price(timestamp >= 15:00 ET)",
-    source_window_rule: "hc_tsll_entry_first_tick_1500",
-    required_horizontal_ids: "hc_tsll_entry_first_tick_1500",
-    symbol_scope: "TSLL",
-    market_scope: "US equities",
-    input_data: "TSLL tick trades",
-    value_unit: "price",
-    valid_from_rule: "first tick after 15:00 ET",
-    valid_until_rule: "path exit or same trading session close",
-    invalidated_by: "no first tick, abnormal halt, stale quote",
-    flow_tags: "entry_anchor, reclaim_reference",
-    evidence_count: "power_hour_lab A/B reclaim",
-    confidence: "已回测候选",
-    status: "review",
-    notes: "B 是所有 A/B gap、TP、SL 的基准价。",
-  },
-  {
-    id: "vc_tsll_ab_c_pre_entry_low",
-    name: "TSLL C价",
-    category: "低点",
-    coordinate_type: "低点",
-    price_domain: "stock_price",
-    definition: "C 价：TSLL 在 14:35 ET 到 15:00 后首笔入场前的逐笔成交最低价。",
-    computation_method: "min(trade_price) over hc_tsll_pre_entry_ab_measure_window",
-    source_window_rule: "hc_tsll_pre_entry_ab_measure_window",
-    required_horizontal_ids: "hc_tsll_pre_entry_ab_measure_window",
-    symbol_scope: "TSLL",
-    market_scope: "US equities",
-    input_data: "TSLL tick trades",
-    value_unit: "price",
-    valid_from_rule: "15:00 ET first tick known",
-    valid_until_rule: "same trading session close or path invalidation",
-    invalidated_by: "missing tick data, market halt, split/adjustment mismatch",
-    flow_tags: "pre_entry_low, v_shape_reference",
-    evidence_count: "power_hour_lab A/B reclaim",
-    confidence: "已回测候选",
-    status: "review",
-    notes: "C 用来描述 V 的下沿和 x/y 结构，不直接决定是否入场。",
-  },
-  {
-    id: "vc_tsll_ab_gap_filter",
-    name: "TSLL A/B跳过阈值",
-    category: "阈值",
+    id: "vc_vwap_deep_deviation",
+    name: "VWAP深度偏离",
+    category: "动态基准偏离",
     coordinate_type: "比例价",
     price_domain: "percent",
-    definition: "A/B gap = A / B - 1。若 A 比 B 高 1% 及以上，认为回补空间太远或追价风险过高，Path 直接跳过。",
-    computation_method: "A / B - 1, using vc_tsll_ab_a_pre_entry_high and vc_tsll_ab_b_entry_price",
-    source_window_rule: "hc_tsll_pre_entry_ab_measure_window + hc_tsll_entry_first_tick_1500",
-    required_horizontal_ids: "hc_tsll_pre_entry_ab_measure_window, hc_tsll_entry_first_tick_1500",
-    symbol_scope: "TSLL",
+    definition: "当前分钟收盘价相对当日分钟级 VWAP 的偏离度达到参数阈值：close_t / VWAP_t - 1 <= -0.006，即 close_t <= VWAP_t * 0.994。",
+    computation_method: "typical_price_t = (high_t + low_t + close_t) / 3; VWAP_t = sum(typical_price_i * volume_i) / sum(volume_i) from 09:30 ET through minute t; vwap_deviation_t = close_t / VWAP_t - 1",
+    source_window_rule: "hc_power_hour_1435_1500_observation",
+    required_horizontal_ids: "hc_power_hour_1435_1500_observation",
     market_scope: "US equities",
-    input_data: "TSLL tick trades",
+    input_data: "1m OHLCV bars from regular session open",
     value_unit: "percent",
-    valid_from_rule: "15:00 ET first tick known",
-    valid_until_rule: "entry decision only",
-    invalidated_by: "A/B gap >= 1%, missing A or B",
-    flow_tags: "skip_filter, chase_risk_control",
-    evidence_count: "A/B sweep skipped 36 vs fixed baseline",
+    valid_from_rule: "after each 14:50-14:59 ET minute bar closes",
+    valid_until_rule: "candidate signal minute execution check",
+    invalidated_by: "VWAP unavailable, zero cumulative volume, missing minute bar, halt/abnormal bar",
+    flow_tags: "vwap_turn, 深度偏离, 小V反弹",
+    evidence_count: "prepare_data.py vwap_turn threshold from tested parameter set",
     confidence: "已回测候选",
     status: "review",
-    notes: "这是过滤纵坐标：不是目标价，而是判断这次 V 是否值得进入的元价格。",
+    notes: "上拐条件 close_t > close_{t-1} 是 Path 信号公式里的动作条件，不单独拆成纵坐标。",
   },
   {
-    id: "vc_tsll_ab_reclaim_tp_sl",
-    name: "TSLL A/B回补目标",
-    category: "目标价",
-    coordinate_type: "阶梯价",
-    price_domain: "stock_price",
-    definition: "A/B 回补退出价格：A/B gap 小于 1% 时做多 TSLL，并用 A/B 结构动态设 TP；主版本用 0.75% SL，1.00% SL 为高胜率对照。",
-    computation_method: "if A/B gap >= 1% skip; else TP = min(A-B gap, 0.75%) - 0.01 percentage point when A>B, otherwise 0.74%; SL primary = 0.75%",
-    source_window_rule: "hc_tsll_pre_entry_ab_measure_window + hc_tsll_entry_first_tick_1500",
-    required_horizontal_ids: "hc_tsll_pre_entry_ab_measure_window, hc_tsll_entry_first_tick_1500",
-    symbol_scope: "TSLL",
+    id: "vc_pre_entry_2m_range_filter",
+    name: "入场前两分钟振幅",
+    category: "短线波动过滤",
+    coordinate_type: "区间振幅",
+    price_domain: "percent",
+    definition: "候选信号入场前最后两根已完成 1分钟K线的高低点振幅必须 >= 0.30%，用于确认入场前确实有足够短线波动。",
+    computation_method: "m2_range = max(current_high, prev_high) / min(current_low, prev_low) - 1; require m2_range >= 0.0030",
+    source_window_rule: "hc_power_hour_1435_1500_observation",
+    required_horizontal_ids: "hc_power_hour_1435_1500_observation",
     market_scope: "US equities",
-    input_data: "TSLL tick trades",
-    value_unit: "price",
-    valid_from_rule: "after B price and A/B gap confirmed",
-    valid_until_rule: "TP/SL hit, manual timeout, or regular session close",
-    invalidated_by: "A/B gap >= 1%, SL hit, halt/news discontinuity",
-    flow_tags: "reclaim_target, v_reversal, risk_box",
-    evidence_count: "A/B SL0.75: n=209, win=72.25%, avg=0.066%; SL1.00: win=74.64%",
+    input_data: "1m OHLCV bars",
+    value_unit: "percent",
+    valid_from_rule: "after candidate signal minute closes and before next-minute first-tick entry",
+    valid_until_rule: "entry decision only",
+    invalidated_by: "m2_range < 0.30%, missing previous minute bar, missing current minute bar",
+    flow_tags: "volatility_filter, 弹性过滤, no_trade_flat_day",
+    evidence_count: "prepare_data.py m2_range_min threshold from tested parameter set",
     confidence: "已回测候选",
     status: "review",
-    notes: "回测结果仍需外样本验证；当前先作为 Path 定义，不生成具体交易日实例。",
+    notes: "这是入场过滤纵坐标；固定 TP/SL 是 Path 内部交易管理参数，不拆成纵坐标。",
+  },
+  {
+    id: "vc_entry_pullback_within_1pct",
+    name: "高点回落不超过1%",
+    category: "追价风险过滤",
+    coordinate_type: "回撤比例",
+    price_domain: "percent",
+    definition: "候选入场价相对 14:35-14:50 ET 参考高点的回落幅度不能超过 1.00%，即 reference_high_1435_1450 / entry_price - 1 <= 0.0100；用于避免价格已经从短线高点回落太深时入场。",
+    computation_method: "reference_high_1435_1450 = max(1m high) over 14:35-14:49 ET completed bars; entry_price = next-minute first tick trade price; pullback_from_high = reference_high_1435_1450 / entry_price - 1; require pullback_from_high <= 0.0100",
+    source_window_rule: "hc_power_hour_1435_1500_observation",
+    required_horizontal_ids: "hc_power_hour_1435_1500_observation",
+    market_scope: "US equities",
+    input_data: "1m OHLCV bars and next-minute first tick trade",
+    value_unit: "percent",
+    valid_from_rule: "when next-minute first tick appears after candidate signal minute",
+    valid_until_rule: "entry decision only",
+    invalidated_by: "pullback_from_high > 1.00%, missing 14:35-14:49 reference high, missing next-minute first tick",
+    flow_tags: "chase_risk_control, pullback_filter, entry_quality",
+    evidence_count: "user-specified baseline filter",
+    confidence: "待验证",
+    status: "review",
+    notes: "这是粗颗粒度价格位置过滤，不拆 A/B/C；参考高点只取 14:35-14:50 前置窗口，不使用 14:50 后信号窗口高点。",
   },
 ];
 
@@ -334,13 +233,35 @@ const pathDefinitionSchema = [
   ["entry_observation_rule", "进入观察状态的条件，不等于下单规则。"],
   ["invalidation_rule", "失效或切换条件。"],
   ["evaluation_plan", "触发后如何验证，例如 30m、1h、收盘、次日。"],
-  ["symbol_scope", "适用标的或股票池。"],
   ["time_scope", "适用时间范围。"],
   ["required_data", "需要的数据源。"],
   ["discovered_by", "发现/提出/入库来源：AI Agent、用户、Codex、外部交易员或人工整理。"],
   ["owner_agent", "主要维护或生成它的 Agent。"],
   ["evidence_count", "证据数量。"],
   ["confidence", "候选、待验证、已验证。"],
+  ["notes", "补充说明。"],
+];
+
+const pathApplicationSchema = [
+  ["application_id", "Path 应用唯一 ID。"],
+  ["path_definition_id", "对应 path_definition.id。"],
+  ["name", "应用名称，表达定义和交易目标标的的组合。"],
+  ["target_symbol", "本次应用的交易目标标的。"],
+  ["target_market", "交易市场或交易所框架。"],
+  ["target_asset_type", "目标标的类型。"],
+  ["parameter_profile", "该应用锁定的参数版本和关键阈值。"],
+  ["monitor_id", "24h 监听任务 ID。"],
+  ["monitor_script", "单独监听代码路径。"],
+  ["monitor_runtime", "运行方式、进程和工作目录。"],
+  ["run_mode", "常驻、定时或手动等运行模式。"],
+  ["runtime_state", "running、ready、paused、failed。"],
+  ["heartbeat_ref", "心跳文件或运行状态引用。"],
+  ["pid_ref", "PID 文件或进程引用。"],
+  ["last_heartbeat_at", "最近一次心跳来源或时间。"],
+  ["data_sources", "监听需要的数据源。"],
+  ["output_targets", "监听输出写入位置。"],
+  ["application_result_summary", "此定义在该标的上的应用或验证结论。"],
+  ["status", "active、review、paused、deprecated。"],
   ["notes", "补充说明。"],
 ];
 
@@ -370,98 +291,227 @@ const pathInstanceSchema = [
 
 const pathDefinitionRows = [
   {
-    id: "path_tsll_power_hour_ab_reclaim_v",
-    name: "TSLL尾盘A/B回补抓V",
-    path_family: "日内 / power_hour / 杠杆ETF",
-    version: "0.1",
+    id: "path_power_hour_v_rebound_fixed_tp_sl",
+    name: "尾盘小V固定TP/SL基准策略",
+    path_family: "日内 / power_hour / 短线反弹",
+    version: "0.2",
     status: "review",
-    description: "美股尾盘 14:50-15:00 ET 固定窗口确认后，以 15:00 后 TSLL 首笔成交为 B 价，结合 14:35-15:00 的 A/B/C 结构过滤追价风险并设置回补目标。",
-    node_sequence: "pre_entry_ab_map -> power_hour_1450_window -> first_tick_entry_1500 -> ab_gap_filter -> ab_reclaim_exit",
-    edge_rules: "14:35 开始取 A/C；14:59 bar 收完后等待 15:00 首笔 B；若 A/B gap >= 1% 则跳过；否则进入回补观察，用 A/B 动态 TP 和 SL 管理。",
-    horizontal_definition_ids: "hc_tsll_pre_entry_ab_measure_window, hc_tsll_power_hour_1450_window, hc_tsll_entry_first_tick_1500",
-    vertical_definition_ids: "vc_tsll_ab_a_pre_entry_high, vc_tsll_ab_b_entry_price, vc_tsll_ab_c_pre_entry_low, vc_tsll_ab_gap_filter, vc_tsll_ab_reclaim_tp_sl",
-    flow_hypothesis: "尾盘 TSLL 的杠杆ETF流动性、被动抛压或短线强平可能造成 15:00 附近的短期错位；A/B 结构用于避免追太远，只捕捉可回补的 V 型空间。",
-    entry_observation_rule: "每个美股常规交易日 14:50 ET 开始观察 TSLL；15:00 后首笔成交出现且 A/B gap < 1% 时，Path 进入 active 候选状态。",
-    invalidation_rule: "A/B gap >= 1%；缺少 TSLL tick；15:00 附近停牌/异常跳价；SL 触发；TSLA/大盘突发事件改变尾盘流动性结构。",
-    evaluation_plan: "继续做 no-lookahead 回测：按 30m、1h、收盘、TP/SL、timeout 分层验证；固定分割训练/测试，单独比较 SL0.75、SL1.00 和固定 TP/SL。",
-    symbol_scope: "TSLL",
-    time_scope: "美股常规交易日 14:35-16:00 ET，跟随纽约夏令时/冬令时",
-    required_data: "TSLL 1m bars, TSLL tick trades, optional TSLA/SPY context",
+    description: "14:35-14:50 ET 记录参考高点，14:50-15:00 ET 用 1分钟K线寻找固定窗口末分钟信号和 VWAP 深度偏离上拐信号的并集；同一天只取最早可执行的一笔，入场前要求前两分钟振幅 >= 0.30%，且候选入场价从 14:35-14:50 参考高点回落不超过 1.00%，下一分钟第一笔逐笔成交做多，固定 TP +1.00% / SL -1.00%，未触发则 15:59:30 ET 退出。",
+    node_sequence: "power_hour_observation_window -> signal_union_fixed_or_vwap_turn -> entry_filters_range_and_pullback -> next_minute_first_tick_long -> fixed_tp_sl_or_tail_exit",
+    edge_rules: "固定窗口末分钟信号：14:59 这根 1m K 收完后准备下一分钟执行；VWAP 深度偏离上拐信号：14:50-14:59 中第一个满足 close/VWAP-1 <= -0.006 且 close_t > close_{t-1} 的分钟。两个信号同日都触发时，只保留最早能执行的一笔；入场前 m2_range >= 0.0030，且 reference_high_1435_1450 / entry_price - 1 <= 0.0100；入场后 TP +1.00%、SL -1.00%，若均未触发则在 15:59:30 ET 退出，不等到最后时刻。",
+    horizontal_definition_ids: "hc_power_hour_1435_1500_observation",
+    vertical_definition_ids: "vc_vwap_deep_deviation, vc_pre_entry_2m_range_filter, vc_entry_pullback_within_1pct",
+    flow_hypothesis: "尾盘若出现低位小V反弹或固定尾段入场信号，并且入场前两分钟有足够短线波动、入场价没有从 14:35-14:50 参考高点回落过深，可能提供可量化的短线反弹交易；过滤低振幅日和过深回落以提高入场质量。",
+    entry_observation_rule: "每个美股常规交易日 14:35 ET 开始记录参考高点，14:50 ET 开始观察 1m 信号；候选信号分钟收完后检查两分钟振幅过滤；下一分钟第一笔成交出现时再检查高点回落过滤，通过后做多。",
+    invalidation_rule: "当日无 1m/VWAP 数据、14:35-14:49 参考高点缺失、信号分钟或前一分钟缺失、m2_range < 0.30%、reference_high_1435_1450 / entry_price - 1 > 1.00%、下一分钟无可用逐笔成交、停牌/异常跳价、同日已有更早入场信号被执行。",
+    evaluation_plan: "继续做 no-lookahead 回测：固定训练/测试分割，分别报告固定窗口末分钟、VWAP 深度偏离上拐、两者并集、m2_range >= 0.30%、高点回落 <= 1.00% 逐层过滤后的样本数、胜率、平均收益、MFE/MAE、尾部退出占比。",
+    time_scope: "美股常规交易日 14:35-16:00 ET，跟随纽约夏令时/冬令时；VWAP 累计从 09:30 ET 开始；尾部退出固定为 15:59:30 ET。",
+    required_data: "1m OHLCV bars, tick trades for next-minute first-tick entry",
     discovered_by: "手动：用户在 power_hour 项目发现，Codex 根据本地回测整理入库",
     owner_agent: "agent_path_validator",
-    evidence_count: "power_hour_lab: A/B SL0.75 n=209; SL1.00 n=209; fixed baseline about n=244",
+    evidence_count: "power_hour_lab baseline: fixed_end + vwap_turn + m2_range_min + pullback filter candidate",
     confidence: "已回测候选",
-    notes: "当前只入定义，不入具体日期实例。A/B SL0.75 回测 win=72.25%, avg=0.066%；SL1.00 win=74.64%, avg=0.053%；固定 TP/SL + m2_range_min avg 更高但样本更少，可作为后续子 Path。",
+    notes: "当前只入定义，不入具体日期实例。TP/SL 和 15:59:30 尾部退出是 Path 内部交易管理参数，不作为纵坐标；下一分钟第一笔成交是执行规则，不作为单独横坐标。",
+  },
+];
+
+const pathApplicationRows = [
+  {
+    application_id: "app_path_power_hour_v_rebound_tsll",
+    path_definition_id: "path_power_hour_v_rebound_fixed_tp_sl",
+    name: "尾盘小V固定TP/SL基准策略 / TSLL",
+    target_symbol: "TSLL",
+    target_market: "US equities",
+    target_asset_type: "leveraged ETF",
+    parameter_profile: "v0.2：14:35-14:50 参考高点；14:50-15:00 信号窗口；m2_range >= 0.30%；高点回落 <= 1.00%；TP/SL = +/-1.00%；15:59:30 ET 尾部退出。",
+    monitor_id: "monitor_tsll_power_hour_v_rebound",
+    monitor_script: "monitors/tsll_power_hour_v_rebound_monitor.py",
+    monitor_runtime: "launchd user agent com.zhaoge.path-application.tsll; installed runtime under /Users/hong/Library/Application Support/ZhaogePathHarness",
+    run_mode: "24h local listener",
+    runtime_state: "running",
+    heartbeat_ref: "/Users/hong/Library/Application Support/ZhaogePathHarness/runtime/path_applications/app_path_power_hour_v_rebound_tsll/heartbeat.json",
+    pid_ref: "/Users/hong/Library/Application Support/ZhaogePathHarness/runtime/path_applications/app_path_power_hour_v_rebound_tsll/monitor.pid",
+    last_heartbeat_at: "读取 heartbeat.json",
+    data_sources: "1m OHLCV bars, tick trades, local runtime heartbeat",
+    output_targets: "heartbeat.json, monitor.log, future path_instance candidates",
+    application_result_summary: "该参数版本已在 TSLL 上应用并得到不错结果；应用层记录标的，不污染 Path 定义、横坐标或纵坐标。",
+    status: "active",
+    notes: "该应用把抽象 Path 定义绑定到 TSLL，并由独立 24h 监听代码维护运行状态；行情判断和交易执行仍按后续接入数据源/风控模块扩展。",
   },
 ];
 
 const pathInstanceRows = [];
 
+const consumerChannelDefinitionSchema = [
+  ["id", "消费渠道定义唯一 ID。"],
+  ["name", "渠道名称。"],
+  ["channel_type", "消费类型：audit_log、notification、paper_trade、live_trade、webhook、review_queue。"],
+  ["consumer_stage", "消费发生在信号生命周期的哪个阶段：记录、通知、模拟成交、实盘下单、人工复核。"],
+  ["signal_contract", "该渠道接受的信号契约和最小字段。"],
+  ["input_sources", "允许消费哪些上游输出，例如 path_application、path_instance、Agent 输出。"],
+  ["output_sink_ref", "输出落点引用；只写 env/config/local 引用或内部表名，不写明文密钥。"],
+  ["delivery_mode", "同步、异步、批量、人工确认后执行。"],
+  ["idempotency_rule", "幂等规则，避免同一信号被重复通知或重复下单。"],
+  ["risk_gate", "风险闸门：record_only、notify_only、paper_only、manual_approval_required、live_disabled 等。"],
+  ["allowed_actions", "该渠道允许执行的动作集合。"],
+  ["audit_policy", "审计保存策略和复盘要求。"],
+  ["latency_slo", "延迟目标或容忍度。"],
+  ["failure_policy", "失败重试、降级、静默或人工接管策略。"],
+  ["owner_agent", "负责写入或维护该渠道的 Agent。"],
+  ["status", "active、planned、disabled、review。"],
+  ["notes", "补充说明。"],
+];
+
+const signalConsumptionRecordSchema = [
+  ["record_id", "信号消费记录唯一 ID。"],
+  ["channel_id", "对应 consumer_channel_definition.id。"],
+  ["path_application_id", "产生信号的 Path 应用 ID；如果不是 Path 应用输出，可以为空。"],
+  ["path_instance_id", "信号关联的 Path 实例 ID；未生成实例前可以为空。"],
+  ["signal_id", "上游信号 ID。"],
+  ["signal_type", "信号类型：watchlist_alert、entry_candidate、exit_candidate、risk_alert、daily_digest。"],
+  ["symbol", "该信号作用的标的。"],
+  ["emitted_at_rule", "信号产生时间框架；定义库原型不写具体日期。"],
+  ["consumed_at_rule", "渠道消费时间框架；真实时间戳进入运行日志。"],
+  ["decision_payload_ref", "消费时使用的结构化信号载荷引用。"],
+  ["delivery_status", "pending、sent、recorded、paper_filled、live_submitted、failed、skipped。"],
+  ["consumer_result", "渠道返回结果、模拟成交结果或通知摘要。"],
+  ["latency_ms", "从信号产生到消费完成的耗时。"],
+  ["error_message", "失败原因或降级说明。"],
+  ["audit_state", "待审、已审、忽略、需要人工复核。"],
+  ["notes", "复盘备注。"],
+];
+
+const consumerChannelDefinitionRows = [
+  {
+    id: "consumer_signal_audit_log",
+    name: "信号审计日志",
+    channel_type: "audit_log",
+    consumer_stage: "record",
+    signal_contract: "path_signal_v1: signal_id, path_application_id, symbol, side, confidence, trigger_snapshot, risk_state",
+    input_sources: "path_application, path_instance, ai_agent_instance",
+    output_sink_ref: "local:signal_consumption_records",
+    delivery_mode: "sync_append",
+    idempotency_rule: "signal_id + channel_id 唯一；重复写入只更新状态和最近结果。",
+    risk_gate: "record_only",
+    allowed_actions: "record_signal, attach_payload_ref, update_delivery_status",
+    audit_policy: "所有信号先落审计；任何通知、模拟仓或 live 交易都必须能回链到审计记录。",
+    latency_slo: "< 1s local append",
+    failure_policy: "本地写入失败则阻断下游消费，并把错误暴露给 runtime 指标。",
+    owner_agent: "agent_path_validator",
+    status: "active",
+    notes: "这是所有消费渠道的根记录层；它不通知、不下单，只保证信号有证据链。",
+  },
+  {
+    id: "consumer_discord_alert",
+    name: "Discord 信号通知",
+    channel_type: "notification",
+    consumer_stage: "notify",
+    signal_contract: "path_signal_v1 with compact human summary and runtime metrics",
+    input_sources: "consumer_signal_audit_log",
+    output_sink_ref: "env:DISCORD_WEBHOOK_URL",
+    delivery_mode: "async_http_post",
+    idempotency_rule: "同一 signal_id 在同一 channel_id 只发一次；状态更新走 thread/update 规则后续再加。",
+    risk_gate: "notify_only",
+    allowed_actions: "send_alert, send_digest, send_failure_notice",
+    audit_policy: "发送前后都写 signal_consumption_record；保存 payload_ref、耗时和 HTTP 状态。",
+    latency_slo: "< 5s after signal audit",
+    failure_policy: "失败重试 2 次；仍失败则只保留审计记录并标记 failed。",
+    owner_agent: "agent_market_state_monitor",
+    status: "planned",
+    notes: "只消费信号，不产生交易动作；webhook 明文必须留在环境变量或密钥库。",
+  },
+  {
+    id: "consumer_paper_portfolio",
+    name: "模拟仓执行",
+    channel_type: "paper_trade",
+    consumer_stage: "paper_execution",
+    signal_contract: "trade_intent_v1: symbol, side, entry_rule, exit_rule, size_model, risk_state",
+    input_sources: "consumer_signal_audit_log, path_instance",
+    output_sink_ref: "local:paper_portfolio_ledger",
+    delivery_mode: "async_local_ledger",
+    idempotency_rule: "signal_id + symbol + side + strategy_version 唯一；重复信号只更新意图，不重复开仓。",
+    risk_gate: "paper_only",
+    allowed_actions: "paper_open, paper_close, paper_skip, mark_to_market",
+    audit_policy: "保存触发价、假成交价、滑点模型、退出原因和后续 MFE/MAE。",
+    latency_slo: "< 2s local simulation",
+    failure_policy: "模拟仓失败不影响日志和通知；记录 failed 并等待人工检查。",
+    owner_agent: "agent_path_validator",
+    status: "planned",
+    notes: "用于让 Path 先在模拟仓里长期跑，人工验证后再考虑 live 渠道。",
+  },
+  {
+    id: "consumer_live_broker_order",
+    name: "Live Broker 实盘交易",
+    channel_type: "live_trade",
+    consumer_stage: "live_execution",
+    signal_contract: "approved_trade_intent_v1 after human approval and risk checks",
+    input_sources: "consumer_signal_audit_log, consumer_paper_portfolio",
+    output_sink_ref: "config:BROKER_ORDER_API",
+    delivery_mode: "manual_approval_then_api",
+    idempotency_rule: "broker_client_order_id = signal_id + approved_revision；任何重试必须复用同一个 client_order_id。",
+    risk_gate: "manual_approval_required, live_disabled_by_default",
+    allowed_actions: "submit_order_after_approval, cancel_order_after_approval",
+    audit_policy: "必须保存审批人、审批时刻、订单请求、券商回执、成交回报和撤单记录。",
+    latency_slo: "human gated",
+    failure_policy: "默认禁用；任何接口失败都不得自动放大或重复下单。",
+    owner_agent: "manual_trader",
+    status: "disabled",
+    notes: "实盘渠道只是数据模型占位；没有人工审批、风控和券商接入前绝不启用。",
+  },
+];
+
+const signalConsumptionRecordRows = [];
+
 const pathCanvasDefinitions = [
   {
-    id: "node_tsll_ab_map",
+    id: "node_observation_window",
     seq: "01",
-    title: "A/B测量",
+    title: "观察窗口",
     meta: "14:35-15:00 ET",
-    detail: "用 15:00 入场前的 TSLL 逐笔成交生成 A 价、C 价，并为后续 A/B gap 判断提供上下边界。",
+    detail: "唯一横坐标：14:35-14:50 记录参考高点，14:50-15:00 观察 1分钟K线信号。",
     kind: "event",
     x: 36,
     y: 96,
-    horizontalIds: "hc_tsll_pre_entry_ab_measure_window",
-    verticalIds: "vc_tsll_ab_a_pre_entry_high, vc_tsll_ab_c_pre_entry_low",
+    horizontalIds: "hc_power_hour_1435_1500_observation",
   },
   {
-    id: "node_tsll_1450_window",
+    id: "node_signal_union",
     seq: "02",
-    title: "尾盘窗口",
-    meta: "14:50-15:00 ET",
-    detail: "固定窗口末分钟收完后形成观察信号。该节点只使用窗口内已完成数据，避免未来函数。",
+    title: "信号并集",
+    meta: "fixed_end or vwap_turn",
+    detail: "固定窗口末分钟信号，或 VWAP 深度偏离后当前分钟收盘高于上一分钟收盘；同日只保留最早可执行的一笔。",
     kind: "flow",
     x: 274,
     y: 96,
-    horizontalIds: "hc_tsll_power_hour_1450_window",
+    verticalIds: "vc_vwap_deep_deviation",
   },
   {
-    id: "node_tsll_1500_entry",
+    id: "node_entry_filters",
     seq: "03",
-    title: "首笔B价",
-    meta: "15:00 first tick",
-    detail: "15:00 ET 后 TSLL 第一笔逐笔成交价作为 B 价，也是这条 Path 的入场锚点。",
-    kind: "active",
-    x: 512,
-    y: 96,
-    horizontalIds: "hc_tsll_entry_first_tick_1500",
-    verticalIds: "vc_tsll_ab_b_entry_price",
-  },
-  {
-    id: "node_tsll_ab_filter",
-    seq: "04",
-    title: "A/B过滤",
-    meta: "gap < 1%",
-    detail: "若 A 比 B 高 1% 及以上，说明回补目标太远或追价风险过大，直接跳过该次 Path。",
+    title: "入场过滤",
+    meta: "range + pullback",
+    detail: "信号分钟收完后检查前两分钟振幅；下一分钟第一笔成交出现时，再检查相对 14:35-14:50 参考高点回落是否不超过 1%。",
     kind: "watching",
     x: 512,
-    y: 248,
-    verticalIds: "vc_tsll_ab_gap_filter",
+    y: 96,
+    verticalIds: "vc_pre_entry_2m_range_filter, vc_entry_pullback_within_1pct",
   },
   {
-    id: "node_tsll_reclaim_exit",
-    seq: "05",
-    title: "回补退出",
-    meta: "TP/SL",
-    detail: "通过 A/B 结构设置动态回补目标；当前主版本记录 SL0.75，SL1.00 作为高胜率对照。",
+    id: "node_execution",
+    seq: "04",
+    title: "执行与风控",
+    meta: "next tick, TP/SL 1%, 15:59:30",
+    detail: "通过过滤后，在下一分钟第一笔逐笔成交做多；固定 TP +1.00%、SL -1.00%，未触发则 15:59:30 ET 退出。",
     kind: "terminal",
     x: 750,
     y: 248,
-    verticalIds: "vc_tsll_ab_reclaim_tp_sl",
   },
 ];
 
 const pathCanvasDefinitionEdges = [
-  { from: "node_tsll_ab_map", to: "node_tsll_1450_window", label: "进入尾盘" },
-  { from: "node_tsll_1450_window", to: "node_tsll_1500_entry", label: "窗口确认" },
-  { from: "node_tsll_1500_entry", to: "node_tsll_ab_filter", label: "计算gap" },
-  { from: "node_tsll_ab_filter", to: "node_tsll_reclaim_exit", label: "未跳过" },
+  { from: "node_observation_window", to: "node_signal_union", label: "观察1m信号" },
+  { from: "node_signal_union", to: "node_entry_filters", label: "候选触发" },
+  { from: "node_entry_filters", to: "node_execution", label: "过滤通过" },
 ];
 
 const pathCanvasInstances = [];
@@ -735,28 +785,28 @@ const sources = [
     status: "已知可接",
   },
   {
-    name: "Binance/BTC 实时流",
+    name: "Binance/BTC USD-M Futures 实时流",
     type: "跨市场预警",
-    coverage: "BTC/ETH 价格、分钟波动、整数关口、成交额；适合 WebSocket 连续监听。",
-    status: "待接入",
+    coverage: "BTCUSDT/ETHUSDT 永续合约 aggTrade、1m Kline、REST 回填和分钟聚合。",
+    status: "已接入",
   },
   {
     name: "美国假期日历",
     type: "交易日历",
     coverage: "美股休市、半日市和节假日前后窗口。",
-    status: "待接入",
+    status: "已接入",
   },
   {
     name: "美联储 FOMC 日历",
     type: "宏观事件",
     coverage: "议息、纪要、点阵图、主席讲话等可预知事件窗口。",
-    status: "待接入",
+    status: "已接入",
   },
   {
     name: "中国假期日历",
     type: "交易日历",
-    coverage: "A股/港股/中国节假日对跨市场风险偏好的影响窗口。",
-    status: "待接入",
+    coverage: "国务院公众假期与调休；A股/HK Connect 休市待交易所日历叠加。",
+    status: "已接入公众假期",
   },
 ];
 
@@ -782,7 +832,7 @@ const symbolDataMapSchema = [
   ["symbol", "标的代码。"],
   ["asset_type", "stock、etf、crypto、future、index、option_underlying。"],
   ["market", "市场：US、crypto、macro、CN、HK。"],
-  ["primary_sources", "主要数据来源。"],
+  ["primary_sources", "主要行情/标的级数据来源；全局日历源不挂到个股这里，避免误判成能供应个股行情。"],
   ["price_data", "是否有自身价格数据。"],
   ["trade_data", "是否有逐笔成交或 trade 数据。"],
   ["nbbo_data", "是否有 NBBO/quote 数据。"],
@@ -818,71 +868,71 @@ const dataSourceDefinitionRows = [
   },
   {
     id: "src_binance_crypto_stream",
-    name: "Binance BTC/ETH 实时流",
+    name: "Binance BTC/ETH USD-M Futures 实时流",
     source_type: "crypto_stream",
-    provider: "Binance public market data",
-    access_protocol: "WebSocket / REST fallback",
-    endpoint_ref: "config:BINANCE_STREAM_BASE",
+    provider: "Binance USD-M Futures public market data",
+    access_protocol: "WebSocket / REST backfill / REST fallback",
+    endpoint_ref: "config:BINANCE_FUTURES_WS_BASE, config:BINANCE_FUTURES_REST_BASE",
     auth_ref: "none_for_public_market_data",
-    data_domains: "crypto_price,trades,volume,alerts",
-    update_mode: "stream",
+    data_domains: "crypto_price,aggTrade,kline_1m,kline_5m,volume,alerts",
+    update_mode: "stream / scheduled_backfill",
     expected_latency: "sub-second to seconds",
-    historical_coverage: "stream forward; REST for backfill",
-    retention_policy: "tick/minute aggregates",
+    historical_coverage: "2022-01-01 forward via /fapi/v1/klines; stream forward",
+    retention_policy: "raw JSONL + normalized 1m/5m bars under ZHAOGE_DATA_ROOT",
     normalization_target: "crypto_ticks,crypto_bars,symbol_data_map",
-    status: "planned",
-    notes: "用于 BTC/ETH 先行和币股预警。",
+    status: "active",
+    notes: "BTCUSD 用户口径映射为 BTCUSDT USD-M 永续合约；用于 BTC/ETH 先行和币股预警。",
   },
   {
     id: "src_us_holiday_calendar",
     name: "美国假期日历",
     source_type: "holiday_calendar",
-    provider: "US market calendar provider",
-    access_protocol: "REST / file import",
+    provider: "NYSE official calendar",
+    access_protocol: "official web source + local normalized JSONL",
     endpoint_ref: "config:US_HOLIDAY_CALENDAR_SOURCE",
-    auth_ref: "env:CALENDAR_API_KEY optional",
+    auth_ref: "none_for_public_calendar",
     data_domains: "us_holidays,market_closures,half_days",
     update_mode: "scheduled_pull",
     expected_latency: "daily",
-    historical_coverage: "待接入",
+    historical_coverage: "2026-2028 normalized in local calendar source",
     retention_policy: "normalized event table",
     normalization_target: "event_calendar,market_sessions,horizontal_coordinate_occurrence",
-    status: "planned",
-    notes: "用于节假日前后、半日市和交易日判定。",
+    status: "active",
+    notes: "全局市场日历源，不供应 TSLA/AAPL 等个股行情；用于节假日前后、半日市和交易日判定，输出 full close / early close / equity close / options close。",
   },
   {
     id: "src_fomc_calendar",
     name: "美联储 FOMC 日历",
     source_type: "macro_calendar",
-    provider: "Federal Reserve / calendar provider",
-    access_protocol: "REST / file import",
+    provider: "Federal Reserve official calendar",
+    access_protocol: "official web source + local normalized JSONL",
     endpoint_ref: "config:FOMC_CALENDAR_SOURCE",
-    auth_ref: "env:CALENDAR_API_KEY optional",
+    auth_ref: "none_for_public_calendar",
     data_domains: "fomc_meeting,minutes,dot_plot,powell_speech",
     update_mode: "scheduled_pull",
     expected_latency: "daily / event dependent",
-    historical_coverage: "待接入",
+    historical_coverage: "2026 forward from Federal Reserve calendar, with local fallback",
     retention_policy: "normalized event table",
     normalization_target: "event_calendar,horizontal_coordinate_occurrence",
-    status: "planned",
-    notes: "用于 FOMC 前后横坐标和事件节点。",
+    status: "active",
+    notes: "全局宏观日历源，不供应个股行情；用于 FOMC 前后横坐标和事件节点，known_at 使用官方日历拉取时点，不用事后新闻重写过去。",
   },
   {
     id: "src_cn_holiday_calendar",
     name: "中国假期日历",
     source_type: "holiday_calendar",
-    provider: "CN market calendar provider",
-    access_protocol: "REST / file import",
+    provider: "中国政府网 / 国务院办公厅",
+    access_protocol: "official notice + local normalized JSONL",
     endpoint_ref: "config:CN_HOLIDAY_CALENDAR_SOURCE",
-    auth_ref: "env:CALENDAR_API_KEY optional",
+    auth_ref: "none_for_public_calendar",
     data_domains: "cn_holidays,cn_market_closures,hk_connect_closures",
     update_mode: "scheduled_pull",
     expected_latency: "daily",
-    historical_coverage: "待接入",
+    historical_coverage: "2026 public holidays and make-up workdays",
     retention_policy: "normalized event table",
     normalization_target: "event_calendar,market_sessions,horizontal_coordinate_occurrence",
-    status: "planned",
-    notes: "用于中国节假日、港股通/跨市场风险窗口。",
+    status: "active_partial",
+    notes: "用于中国节假日、港股通/跨市场风险窗口；当前只登记公众假期和调休，A股/HK Connect 休市待交易所日历叠加。",
   },
 ];
 
@@ -942,7 +992,7 @@ const symbolDataMapRows = [
     symbol: "TSLA",
     asset_type: "stock",
     market: "US",
-    primary_sources: "src_bc_market_data, src_us_holiday_calendar, src_fomc_calendar",
+    primary_sources: "src_bc_market_data",
     price_data: "yes",
     trade_data: "planned",
     nbbo_data: "planned",
@@ -966,7 +1016,7 @@ const symbolDataMapRows = [
     symbol: "NVDA",
     asset_type: "stock",
     market: "US",
-    primary_sources: "src_bc_market_data, src_us_holiday_calendar, src_fomc_calendar",
+    primary_sources: "src_bc_market_data",
     price_data: "yes",
     trade_data: "planned",
     nbbo_data: "planned",
@@ -1006,7 +1056,7 @@ const symbolDataMapRows = [
     notes: "币股核心，依赖 BTC/ETH 先行数据。",
     datasets: [
       { domain: "price", status: "partial", granularity: "bars later", source: "BC API", range: "pending scan", last_updated: "pending", detail: "用于币股延迟确认。" },
-      { domain: "crypto_lead", status: "planned", granularity: "BTC/ETH stream", source: "Binance", range: "forward", last_updated: "n/a", detail: "用于 1-5 分钟 lead-lag。" },
+      { domain: "crypto_lead", status: "ready", granularity: "BTC/ETH USD-M Futures stream", source: "Binance", range: "forward + REST backfill", last_updated: "runtime manifest", detail: "用于 1-5 分钟 lead-lag。" },
       { domain: "options", status: "planned", granularity: "chain/trades/IV", source: "BC API", range: "not loaded", last_updated: "n/a", detail: "用于 CONL/COIN 高波动期权。" },
     ],
   },
@@ -1015,23 +1065,47 @@ const symbolDataMapRows = [
     asset_type: "crypto",
     market: "crypto",
     primary_sources: "src_binance_crypto_stream",
-    price_data: "planned",
-    trade_data: "planned",
+    price_data: "yes",
+    trade_data: "aggTrade",
     nbbo_data: "n/a",
-    bar_data: "1m/5m planned",
-    snapshot_data: "planned",
+    bar_data: "1m/5m ready via REST backfill; 1m stream forward",
+    snapshot_data: "24h ticker fallback",
     option_chain_data: "n/a",
     option_trade_quote_data: "n/a",
     news_event_data: "macro/crypto events planned",
-    coverage_start: "forward after websocket",
-    coverage_end: "streaming",
-    last_updated: "pending",
-    quality_status: "planned",
-    notes: "跨市场预警源，不是美股标的。",
+    coverage_start: "2022-01-01 backfill capable",
+    coverage_end: "streaming / latest manifest",
+    last_updated: "runtime manifest",
+    quality_status: "ready",
+    notes: "跨市场预警源，不是美股标的；用户口径 BTCUSD 映射为 Binance BTCUSDT USD-M 永续。",
     datasets: [
-      { domain: "price_stream", status: "planned", granularity: "tick/aggTrade", source: "Binance WebSocket", range: "forward", last_updated: "n/a", detail: "用于 BTC 分钟预警价。" },
-      { domain: "bars", status: "planned", granularity: "1m/3m/5m aggregates", source: "Binance REST/WebSocket", range: "forward + backfill", last_updated: "n/a", detail: "用于 lead-lag 特征。" },
-      { domain: "alerts", status: "planned", granularity: "delta pct / round levels", source: "local harness", range: "runtime", last_updated: "n/a", detail: "用于生成横纵坐标实例。" },
+      { domain: "price_stream", status: "ready", granularity: "aggTrade + kline_1m", source: "Binance USD-M Futures WebSocket", range: "forward", last_updated: "runtime manifest", detail: "用于 BTC 分钟预警价。" },
+      { domain: "bars", status: "ready", granularity: "1m/5m aggregates", source: "Binance /fapi/v1/klines + WebSocket", range: "2022-01-01 forward capable", last_updated: "runtime manifest", detail: "用于 lead-lag 特征。" },
+      { domain: "alerts", status: "active", granularity: "delta pct / round levels", source: "local harness", range: "runtime", last_updated: "runtime", detail: "用于生成横纵坐标实例。" },
+    ],
+  },
+  {
+    symbol: "ETHUSDT",
+    asset_type: "crypto",
+    market: "crypto",
+    primary_sources: "src_binance_crypto_stream",
+    price_data: "yes",
+    trade_data: "aggTrade",
+    nbbo_data: "n/a",
+    bar_data: "1m/5m ready via REST backfill; 1m stream forward",
+    snapshot_data: "24h ticker fallback",
+    option_chain_data: "n/a",
+    option_trade_quote_data: "n/a",
+    news_event_data: "macro/crypto events planned",
+    coverage_start: "2022-01-01 backfill capable",
+    coverage_end: "streaming / latest manifest",
+    last_updated: "runtime manifest",
+    quality_status: "ready",
+    notes: "BTC 辅助确认和币股风险偏好对照源，使用 Binance ETHUSDT USD-M 永续。",
+    datasets: [
+      { domain: "price_stream", status: "ready", granularity: "aggTrade + kline_1m", source: "Binance USD-M Futures WebSocket", range: "forward", last_updated: "runtime manifest", detail: "用于 ETH/BTC 风险偏好确认。" },
+      { domain: "bars", status: "ready", granularity: "1m/5m aggregates", source: "Binance /fapi/v1/klines + WebSocket", range: "2022-01-01 forward capable", last_updated: "runtime manifest", detail: "用于 lead-lag 特征。" },
+      { domain: "alerts", status: "active", granularity: "delta pct / round levels", source: "local harness", range: "runtime", last_updated: "runtime", detail: "用于生成横纵坐标实例。" },
     ],
   },
   {
@@ -1039,18 +1113,18 @@ const symbolDataMapRows = [
     asset_type: "stock",
     market: "US",
     primary_sources: "src_bc_market_data, src_binance_crypto_stream",
-    price_data: "planned",
+    price_data: "partial",
     trade_data: "planned",
     nbbo_data: "planned",
     bar_data: "1m/daily planned",
     snapshot_data: "planned",
     option_chain_data: "planned",
     option_trade_quote_data: "planned",
-    news_event_data: "crypto/news planned",
+    news_event_data: "crypto/news planned; BTC lead active",
     coverage_start: "pending scan",
     coverage_end: "pending scan",
     last_updated: "pending",
-    quality_status: "planned",
+    quality_status: "partial",
     notes: "BTC 高 beta 代理。",
     datasets: [
       { domain: "price", status: "planned", granularity: "bars", source: "BC API", range: "pending scan", last_updated: "n/a", detail: "用于 BTC 到币股 path。" },
@@ -1058,26 +1132,73 @@ const symbolDataMapRows = [
     ],
   },
   {
-    symbol: "AAPL",
-    asset_type: "stock",
+    symbol: "US_HOLIDAY_CALENDAR",
+    asset_type: "calendar",
     market: "US",
-    primary_sources: "src_bc_market_data, src_us_holiday_calendar, src_fomc_calendar",
-    price_data: "planned",
-    trade_data: "planned",
-    nbbo_data: "planned",
-    bar_data: "1m/daily planned",
-    snapshot_data: "planned",
-    option_chain_data: "planned",
-    option_trade_quote_data: "planned",
-    news_event_data: "earnings planned",
-    coverage_start: "pending scan",
-    coverage_end: "pending scan",
-    last_updated: "pending",
-    quality_status: "planned",
-    notes: "慢性股/大盘稳定权重。",
+    primary_sources: "src_us_holiday_calendar",
+    price_data: "n/a",
+    trade_data: "n/a",
+    nbbo_data: "n/a",
+    bar_data: "n/a",
+    snapshot_data: "n/a",
+    option_chain_data: "n/a",
+    option_trade_quote_data: "n/a",
+    news_event_data: "full close / early close ready",
+    coverage_start: "2026 normalized",
+    coverage_end: "2028 normalized capable",
+    last_updated: "runtime manifest",
+    quality_status: "ready",
+    notes: "全局美国市场日历数据集；只供应节假日、半日市和交易时段事件，不供应任何个股行情。",
     datasets: [
-      { domain: "price", status: "planned", granularity: "bars", source: "BC API", range: "pending scan", last_updated: "n/a", detail: "用于慢性股对照组。" },
-      { domain: "events", status: "planned", granularity: "earnings/corporate", source: "event calendar", range: "not loaded", last_updated: "n/a", detail: "用于财报和权重股影响。" },
+      { domain: "market_sessions", status: "ready", granularity: "full close / early close / regular close / options close", source: "NYSE official calendar", range: "2026 forward normalized", last_updated: "runtime manifest", detail: "用于交易日判定、假日前后窗口和半日市横坐标。" },
+      { domain: "events", status: "ready", granularity: "event_calendar JSONL", source: "src_us_holiday_calendar", range: "runtime data", last_updated: "runtime manifest", detail: "输出 event_id、known_at_utc、source_url、timezone 等规范字段。" },
+    ],
+  },
+  {
+    symbol: "FOMC_CALENDAR",
+    asset_type: "macro_calendar",
+    market: "US",
+    primary_sources: "src_fomc_calendar",
+    price_data: "n/a",
+    trade_data: "n/a",
+    nbbo_data: "n/a",
+    bar_data: "n/a",
+    snapshot_data: "n/a",
+    option_chain_data: "n/a",
+    option_trade_quote_data: "n/a",
+    news_event_data: "meeting / statement / minutes ready",
+    coverage_start: "2026 official calendar",
+    coverage_end: "forward refresh",
+    last_updated: "runtime manifest",
+    quality_status: "ready",
+    notes: "全局 FOMC 议息日历数据集；用于宏观事件横坐标，不供应个股行情。",
+    datasets: [
+      { domain: "fomc_meetings", status: "ready", granularity: "meeting day / statement / minutes / dot plot / chair window", source: "Federal Reserve official calendar", range: "2026 forward", last_updated: "runtime manifest", detail: "known_at 使用官方日历拉取时点，避免事后新闻污染。" },
+      { domain: "events", status: "ready", granularity: "event_calendar JSONL", source: "src_fomc_calendar", range: "runtime data", last_updated: "runtime manifest", detail: "用于 FOMC 前后路径、波动窗口和规则禁用窗口。" },
+    ],
+  },
+  {
+    symbol: "CN_HOLIDAY_CALENDAR",
+    asset_type: "calendar",
+    market: "CN",
+    primary_sources: "src_cn_holiday_calendar",
+    price_data: "n/a",
+    trade_data: "n/a",
+    nbbo_data: "n/a",
+    bar_data: "n/a",
+    snapshot_data: "n/a",
+    option_chain_data: "n/a",
+    option_trade_quote_data: "n/a",
+    news_event_data: "public holiday / make-up workday ready",
+    coverage_start: "2026 public holidays",
+    coverage_end: "forward refresh",
+    last_updated: "runtime manifest",
+    quality_status: "partial",
+    notes: "全局中国节假日数据集；当前只供应国务院公众假期和调休，A股/HK Connect 休市待交易所日历叠加。",
+    datasets: [
+      { domain: "public_holidays", status: "ready", granularity: "holiday window / natural holiday", source: "中国政府网 / 国务院办公厅", range: "2026", last_updated: "runtime manifest", detail: "用于中国节假日和跨市场风险窗口。" },
+      { domain: "makeup_workdays", status: "ready", granularity: "adjusted workday", source: "中国政府网 / 国务院办公厅", range: "2026", last_updated: "runtime manifest", detail: "登记调休工作日，不直接等同交易所开市。" },
+      { domain: "exchange_sessions", status: "planned", granularity: "A股 / HK Connect close", source: "future exchange official calendars", range: "not loaded", last_updated: "n/a", detail: "接入交易所官方日历后再升级为 ready。" },
     ],
   },
 ];
@@ -1100,6 +1221,12 @@ const pageMeta = {
     title: "Path管理",
     summary:
       "这里先只做 path 模板和管理框架，不急着生成交易建议。每条 path 都必须由横坐标链、纵坐标序列、资金状态假设、失效条件和验证口径组成。",
+  },
+  consumers: {
+    kicker: "Signal Consumers",
+    title: "消费渠道管理",
+    summary:
+      "消费渠道负责接住 Path 或 Agent 产生的信号：先审计记录，再按权限通知、写模拟仓或进入实盘审批。它让每个信号的去向、耗时、结果和风险闸门都能被追踪。",
   },
   agents: {
     kicker: "Agent Registry",
@@ -1140,6 +1267,12 @@ const metrics = {
     ["资金状态", "把价格变化和流入流出假设连接起来"],
     ["人工审查", "AI 只提候选，交易员决定是否入库"],
   ],
+  consumers: [
+    ["4 类", "日志、通知、模拟仓、实盘审批"],
+    ["Signal", "消费 Path Runtime 的输出信号"],
+    ["幂等", "同一信号不能重复通知或重复下单"],
+    ["审计优先", "任何下游动作都要先落记录"],
+  ],
   agents: [
     ["2 个模型", "qwen3.6-plus / qwen3.6-flash"],
     ["1 个密钥引用", "统一使用 env:BAILIAN_API_KEY"],
@@ -1170,8 +1303,11 @@ const state = {
   selectedPathNodeId: null,
   pathCanvasPositions: {
     definition: {},
+    application: {},
     instance: {},
   },
+  consumerEntity: "definition",
+  consumerSearch: "",
   agentEntity: "definition",
   agentSearch: "",
   sourceEntity: "definition",
@@ -1205,29 +1341,65 @@ const runtimeVariableRegistry = {
     maskedValue: "http://bcprivateserver.site",
     note: "BC 行情 API base URL，不属于密钥。",
   },
+  "local:signal_consumption_records": {
+    kind: "本地表",
+    status: "已登记",
+    maskedValue: "signal_consumption_record",
+    note: "消费渠道审计记录表，保存每次信号被记录、通知或执行的结果。",
+  },
+  "local:paper_portfolio_ledger": {
+    kind: "本地账本",
+    status: "待接入",
+    maskedValue: "paper_portfolio_ledger",
+    note: "模拟仓账本引用；当前只建消费渠道定义，后续再接成交模拟。",
+  },
+  "env:DISCORD_WEBHOOK_URL": {
+    kind: "环境变量",
+    status: "已登记",
+    maskedValue: "https://discord.com/api/webhooks/********",
+    note: "Discord webhook URL。页面只显示脱敏值，不保存明文 webhook。",
+  },
+  "config:BROKER_ORDER_API": {
+    kind: "配置项",
+    status: "未启用",
+    maskedValue: "disabled",
+    note: "券商实盘交易接口占位；没有人工审批和风控前不启用。",
+  },
   "config:BINANCE_STREAM_BASE": {
     kind: "配置项",
-    status: "计划接入",
-    maskedValue: "Binance public market data endpoint",
-    note: "公开行情端点，后续用于 BTC/ETH WebSocket 或 REST fallback。",
+    status: "已迁移",
+    maskedValue: "replaced by BINANCE_FUTURES_WS_BASE",
+    note: "旧 spot/market-data-only 引用；当前保留兼容说明。",
+  },
+  "config:BINANCE_FUTURES_WS_BASE": {
+    kind: "配置项",
+    status: "已接入",
+    maskedValue: "wss://fstream.binance.com/market/stream?streams=",
+    note: "Binance USD-M Futures WebSocket，用于 aggTrade 和 kline_1m。",
+  },
+  "config:BINANCE_FUTURES_REST_BASE": {
+    kind: "配置项",
+    status: "已接入",
+    maskedValue: "https://fapi.binance.com",
+    note: "Binance USD-M Futures REST，用于 /fapi/v1/klines 和 /fapi/v1/ticker/24hr。",
   },
   "config:US_HOLIDAY_CALENDAR_SOURCE": {
     kind: "配置项",
-    status: "未配置",
-    maskedValue: "未知",
-    note: "美国假期和美股交易日历来源还没有接入真实配置。",
+    status: "已接入",
+    maskedValue: "https://www.nyse.com/markets/hours-calendars",
+    note: "NYSE 官方交易时间和假期页面；本地刷新生成 normalized event JSONL。",
   },
   "config:FOMC_CALENDAR_SOURCE": {
     kind: "配置项",
-    status: "未配置",
-    maskedValue: "未知",
-    note: "FOMC 日历来源还没有接入真实配置。",
+    status: "已接入",
+    maskedValue: "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    note: "美联储官方 FOMC 日历；本地刷新生成会议、声明、纪要、点阵图事件。",
   },
   "config:CN_HOLIDAY_CALENDAR_SOURCE": {
     kind: "配置项",
-    status: "未配置",
-    maskedValue: "未知",
-    note: "中国假期日历来源还没有接入真实配置。",
+    status: "已接入公众假期",
+    maskedValue: "gov.cn official holiday notice",
+    note: "国务院办公厅节假日通知；交易所休市日历后续另接。",
   },
   "env:CALENDAR_API_KEY": {
     kind: "环境变量",
@@ -1255,7 +1427,10 @@ function applyBackendBootstrap(payload) {
   replaceRows(verticalDefinitionRows, payload.verticalDefinitionRows);
   replaceRows(verticalOccurrenceRows, payload.verticalOccurrenceRows);
   replaceRows(pathDefinitionRows, payload.pathDefinitionRows);
+  replaceRows(pathApplicationRows, payload.pathApplicationRows);
   replaceRows(pathInstanceRows, payload.pathInstanceRows);
+  replaceRows(consumerChannelDefinitionRows, payload.consumerChannelDefinitionRows);
+  replaceRows(signalConsumptionRecordRows, payload.signalConsumptionRecordRows);
   replaceRows(llmApiDefinitionRows, payload.llmApiDefinitionRows);
   replaceRows(aiAgentInstanceRows, payload.aiAgentInstanceRows);
   replaceRows(dataSourceDefinitionRows, payload.dataSourceDefinitionRows);
@@ -1316,7 +1491,6 @@ const fieldLabelMap = {
   known_at_rule: "已知规则",
   recurrence: "发生频率",
   market_scope: "市场范围",
-  symbol_scope: "标的范围",
   flow_tags: "资金标签",
   linked_vertical_types: "关联纵坐标",
   data_requirements: "数据要求",
@@ -1372,6 +1546,22 @@ const fieldLabelMap = {
   evaluation_plan: "验证计划",
   time_scope: "时间范围",
   required_data: "所需数据",
+  application_id: "应用ID",
+  target_symbol: "交易目标",
+  target_market: "目标市场",
+  target_asset_type: "标的类型",
+  parameter_profile: "参数档案",
+  monitor_id: "监听ID",
+  monitor_script: "监听代码",
+  monitor_runtime: "运行环境",
+  run_mode: "运行模式",
+  runtime_state: "运行状态",
+  heartbeat_ref: "心跳引用",
+  pid_ref: "PID引用",
+  last_heartbeat_at: "最近心跳",
+  data_sources: "数据来源",
+  output_targets: "输出目标",
+  application_result_summary: "应用结论",
   discovered_by: "发现者",
   owner_agent: "维护Agent",
   instance_id: "实例ID",
@@ -1388,6 +1578,29 @@ const fieldLabelMap = {
   mfe: "最大有利",
   mae: "最大不利",
   human_review_state: "人工复盘",
+  channel_type: "渠道类型",
+  consumer_stage: "消费阶段",
+  signal_contract: "信号契约",
+  output_sink_ref: "输出落点",
+  delivery_mode: "投递方式",
+  idempotency_rule: "幂等规则",
+  risk_gate: "风险闸门",
+  allowed_actions: "允许动作",
+  audit_policy: "审计策略",
+  latency_slo: "延迟目标",
+  failure_policy: "失败策略",
+  channel_id: "渠道ID",
+  record_id: "记录ID",
+  signal_id: "信号ID",
+  signal_type: "信号类型",
+  emitted_at_rule: "信号产生框架",
+  consumed_at_rule: "消费时间框架",
+  decision_payload_ref: "信号载荷引用",
+  delivery_status: "投递状态",
+  consumer_result: "消费结果",
+  latency_ms: "耗时ms",
+  error_message: "错误信息",
+  audit_state: "审计状态",
   provider: "供应商",
   model_name: "模型名",
   model_family: "模型家族",
@@ -1484,11 +1697,31 @@ const entityRegistry = {
       idField: "id",
       rows: pathDefinitionRows,
     },
+    application: {
+      label: "Path 应用",
+      table: "path_application",
+      idField: "application_id",
+      rows: pathApplicationRows,
+    },
     instance: {
       label: "Path 实例",
       table: "path_instance",
       idField: "instance_id",
       rows: pathInstanceRows,
+    },
+  },
+  consumers: {
+    definition: {
+      label: "消费渠道定义",
+      table: "consumer_channel_definition",
+      idField: "id",
+      rows: consumerChannelDefinitionRows,
+    },
+    record: {
+      label: "信号消费记录",
+      table: "signal_consumption_record",
+      idField: "record_id",
+      rows: signalConsumptionRecordRows,
     },
   },
   agents: {
@@ -1614,6 +1847,15 @@ const referenceFieldRules = [
   },
   {
     sourcePage: "paths",
+    sourceEntity: "application",
+    field: "path_definition_id",
+    targetPage: "paths",
+    targetEntity: "definition",
+    cardinality: "N:1",
+    rule: "每个 Path 应用必须绑定一个已存在的 Path 定义，再叠加交易目标标的和监听代码。",
+  },
+  {
+    sourcePage: "paths",
     sourceEntity: "instance",
     field: "path_definition_id",
     targetPage: "paths",
@@ -1638,6 +1880,33 @@ const referenceFieldRules = [
     targetEntity: "occurrence",
     cardinality: "N:N",
     rule: "Path 实例引用具体发生的纵坐标实例；不要把定义 ID 写进实例字段。",
+  },
+  {
+    sourcePage: "consumers",
+    sourceEntity: "record",
+    field: "channel_id",
+    targetPage: "consumers",
+    targetEntity: "definition",
+    cardinality: "N:1",
+    rule: "每条信号消费记录必须回指一个已登记的消费渠道定义。",
+  },
+  {
+    sourcePage: "consumers",
+    sourceEntity: "record",
+    field: "path_application_id",
+    targetPage: "paths",
+    targetEntity: "application",
+    cardinality: "N:1 optional",
+    rule: "如果信号来自 Path 应用，必须记录 path_application.application_id。",
+  },
+  {
+    sourcePage: "consumers",
+    sourceEntity: "record",
+    field: "path_instance_id",
+    targetPage: "paths",
+    targetEntity: "instance",
+    cardinality: "N:1 optional",
+    rule: "如果信号已经生成 Path 实例，必须记录 path_instance.instance_id。",
   },
   {
     sourcePage: "agents",
@@ -1665,12 +1934,15 @@ const specDiagramNodes = [
   { id: "vc_def", title: "纵坐标定义", code: "vertical_coordinate", page: "vertical", entity: "definition", x: 26, y: 192 },
   { id: "vc_occ", title: "纵坐标实例", code: "vertical_coordinate_occurrence", page: "vertical", entity: "occurrence", x: 304, y: 192 },
   { id: "path_def", title: "Path 定义", code: "path_definition", page: "paths", entity: "definition", x: 582, y: 96 },
-  { id: "path_inst", title: "Path 实例", code: "path_instance", page: "paths", entity: "instance", x: 830, y: 96 },
-  { id: "llm_def", title: "模型接入定义", code: "llm_api_definition", page: "agents", entity: "definition", x: 582, y: 296 },
-  { id: "agent_inst", title: "Agent 实例", code: "ai_agent_instance", page: "agents", entity: "instance", x: 830, y: 296 },
-  { id: "src_def", title: "数据源头定义", code: "data_source_definition", page: "sources", entity: "definition", x: 26, y: 398 },
-  { id: "symbol_map", title: "标的数据地图", code: "symbol_data_map", page: "sources", entity: "map", x: 304, y: 398 },
-  { id: "dataset_cov", title: "标的数据域覆盖", code: "symbol_dataset_coverage", page: "sources", entity: "map", x: 582, y: 444 },
+  { id: "path_app", title: "Path 应用", code: "path_application", page: "paths", entity: "application", x: 830, y: 96 },
+  { id: "path_inst", title: "Path 实例", code: "path_instance", page: "paths", entity: "instance", x: 1078, y: 96 },
+  { id: "consumer_def", title: "消费渠道定义", code: "consumer_channel_definition", page: "consumers", entity: "definition", x: 830, y: 276 },
+  { id: "consumer_rec", title: "信号消费记录", code: "signal_consumption_record", page: "consumers", entity: "record", x: 1078, y: 276 },
+  { id: "llm_def", title: "模型接入定义", code: "llm_api_definition", page: "agents", entity: "definition", x: 582, y: 456 },
+  { id: "agent_inst", title: "Agent 实例", code: "ai_agent_instance", page: "agents", entity: "instance", x: 830, y: 456 },
+  { id: "src_def", title: "数据源头定义", code: "data_source_definition", page: "sources", entity: "definition", x: 26, y: 570 },
+  { id: "symbol_map", title: "标的数据地图", code: "symbol_data_map", page: "sources", entity: "map", x: 304, y: 570 },
+  { id: "dataset_cov", title: "标的数据域覆盖", code: "symbol_dataset_coverage", page: "sources", entity: "map", x: 582, y: 616 },
 ];
 
 const specDiagramEdges = [
@@ -1679,7 +1951,10 @@ const specDiagramEdges = [
   { from: "hc_def", to: "vc_def", label: "依赖/生成 N:N" },
   { from: "hc_def", to: "path_def", label: "Path 使用" },
   { from: "vc_def", to: "path_def", label: "Path 使用" },
-  { from: "path_def", to: "path_inst", label: "实例化 1:N" },
+  { from: "path_def", to: "path_app", label: "应用 1:N" },
+  { from: "path_app", to: "path_inst", label: "生成/回放 1:N" },
+  { from: "path_app", to: "consumer_rec", label: "发出信号" },
+  { from: "consumer_def", to: "consumer_rec", label: "消费 1:N" },
   { from: "hc_occ", to: "path_inst", label: "实盘触发" },
   { from: "vc_occ", to: "path_inst", label: "实盘结果" },
   { from: "llm_def", to: "agent_inst", label: "绑定 1:N" },
@@ -1766,6 +2041,7 @@ const pageDefaultEntities = {
   horizontal: "definition",
   vertical: "definition",
   paths: "definition",
+  consumers: "definition",
   agents: "definition",
   sources: "definition",
 };
@@ -1774,6 +2050,7 @@ function getPageSearchValue(page = state.page) {
   if (page === "horizontal") return state.horizontalSearch;
   if (page === "vertical") return state.verticalSearch;
   if (page === "paths") return state.pathSearch;
+  if (page === "consumers") return state.consumerSearch;
   if (page === "agents") return state.agentSearch;
   if (page === "sources") return state.sourceSearch;
   return state.search;
@@ -1783,6 +2060,7 @@ function getPageEntityValue(page = state.page) {
   if (page === "horizontal") return state.horizontalEntity;
   if (page === "vertical") return state.verticalEntity;
   if (page === "paths") return state.pathEntity;
+  if (page === "consumers") return state.consumerEntity;
   if (page === "agents") return state.agentEntity;
   if (page === "sources") return state.sourceEntity;
   return "";
@@ -1863,6 +2141,7 @@ function resetRoutedState() {
   state.pathSearch = "";
   state.selectedPathRecordId = null;
   state.selectedPathNodeId = null;
+  state.consumerSearch = "";
   state.agentSearch = "";
   state.sourceSearch = "";
   state.selectedDataSymbol = null;
@@ -1894,12 +2173,19 @@ function applyRouteFromHash() {
   }
 
   if (page === "paths") {
-    state.pathEntity = entityParam === "instance" ? "instance" : "definition";
+    state.pathEntity = ["definition", "application", "instance"].includes(entityParam) ? entityParam : "definition";
     state.pathSearch = q;
     state.selectedPathRecordId = params.get("record") || null;
     state.selectedPathNodeId = params.get("node") || null;
   } else {
     state.pathEntity = pageDefaultEntities.paths;
+  }
+
+  if (page === "consumers") {
+    state.consumerEntity = entityParam === "record" ? "record" : "definition";
+    state.consumerSearch = q;
+  } else {
+    state.consumerEntity = pageDefaultEntities.consumers;
   }
 
   if (page === "agents") {
@@ -2028,9 +2314,13 @@ function jumpToReference({ page, entity, search }) {
     state.verticalSearch = search || "";
   }
   if (page === "paths") {
-    state.pathEntity = entity === "instance" ? "instance" : "definition";
+    state.pathEntity = ["definition", "application", "instance"].includes(entity) ? entity : "definition";
     state.pathSearch = search || "";
-    if (/^(path_|pi_)/.test(search || "")) state.selectedPathRecordId = search;
+    if (/^(path_|app_path_|pi_)/.test(search || "")) state.selectedPathRecordId = search;
+  }
+  if (page === "consumers") {
+    state.consumerEntity = entity === "record" ? "record" : "definition";
+    state.consumerSearch = search || "";
   }
   if (page === "agents") {
     state.agentEntity = entity === "instance" ? "instance" : "definition";
@@ -2038,9 +2328,9 @@ function jumpToReference({ page, entity, search }) {
   }
   if (page === "sources") {
     state.sourceEntity = entity === "map" ? "map" : "definition";
-    state.sourceSearch = search || "";
-    state.selectedDataSymbol =
-      entity === "map" && symbolDataMapRows.some((row) => row.symbol === search) ? search : null;
+    const exactSymbol = entity === "map" && symbolDataMapRows.some((row) => row.symbol === search);
+    state.sourceSearch = exactSymbol ? "" : (search || "");
+    state.selectedDataSymbol = exactSymbol ? search : null;
   }
 
   render();
@@ -2057,6 +2347,7 @@ function render() {
     state.page === "horizontal" ||
     state.page === "vertical" ||
     state.page === "paths" ||
+    state.page === "consumers" ||
     state.page === "agents" ||
     state.page === "sources" ||
     state.page === "spec";
@@ -2069,6 +2360,7 @@ function render() {
   if (state.page === "horizontal") renderHorizontalEntityPage(container);
   if (state.page === "vertical") renderVerticalEntityPage(container);
   if (state.page === "paths") renderPathPage(container);
+  if (state.page === "consumers") renderConsumerPage(container);
   if (state.page === "agents") renderAgentPage(container);
   if (state.page === "sources") renderSourcePage(container);
   if (state.page === "spec") renderSpecPage(container);
@@ -2150,7 +2442,7 @@ function renderEntityRelationshipDiagram() {
   return `
     <div class="erd-scroll">
       <div class="erd-canvas" role="img" aria-label="横坐标、纵坐标、Path、Agent、数据源实体关系图">
-        <svg class="erd-edges" viewBox="0 0 1080 560" aria-hidden="true">
+        <svg class="erd-edges" viewBox="0 0 1320 700" aria-hidden="true">
           <defs>
             <marker id="erd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z"></path>
@@ -2289,7 +2581,6 @@ function renderHorizontalEntityPage(container) {
             "start_rule",
             "end_rule",
             "known_at_rule",
-            "symbol_scope",
             "linked_vertical_types",
             "confidence",
             "status",
@@ -2698,14 +2989,31 @@ function getRowRelations(row, context = {}) {
     appendTokenRelations(relations, "Path", row.path_ids, "path_ids", "path");
   }
   if (context.page === "paths" && context.entity === "definition") {
+    relations.push(makeRelation("看应用", "paths", "application", row.id, "查看这个 Path 定义绑定了哪些交易目标标的", "forward"));
     relations.push(makeRelation("看实例", "paths", "instance", row.id, "查看这个 Path 定义的实盘实例", "forward"));
     appendTokenRelations(relations, "横定义", row.horizontal_definition_ids, "horizontal_definition_ids", "cross");
     appendTokenRelations(relations, "纵定义", row.vertical_definition_ids, "vertical_definition_ids", "cross");
   }
+  if (context.page === "paths" && context.entity === "application") {
+    relations.push(makeRelation("回定义", "paths", "definition", row.path_definition_id, "回到 Path 定义", "back"));
+    relations.push(makeRelation("看实例", "paths", "instance", row.application_id, "查看这个应用生成的实盘实例", "forward"));
+    relations.push(makeRelation("消费记录", "consumers", "record", row.application_id, "查看这个应用输出信号的消费记录", "forward"));
+  }
   if (context.page === "paths" && context.entity === "instance") {
     relations.push(makeRelation("回定义", "paths", "definition", row.path_definition_id, "回到 Path 定义", "back"));
+    relations.push(makeRelation("消费记录", "consumers", "record", row.instance_id, "查看这个实例关联的信号消费记录", "forward"));
     appendTokenRelations(relations, "横实例", row.horizontal_occurrence_ids, "horizontal_occurrence_ids", "cross");
     appendTokenRelations(relations, "纵实例", row.vertical_occurrence_ids, "vertical_occurrence_ids", "cross");
+  }
+  if (context.page === "consumers" && context.entity === "definition") {
+    appendVariablePeekRelations(relations, "输出", row.output_sink_ref, "secret");
+    relations.push(makeRelation("消费记录", "consumers", "record", row.id, "查看这个渠道的消费记录", "forward"));
+  }
+  if (context.page === "consumers" && context.entity === "record") {
+    relations.push(makeRelation("渠道定义", "consumers", "definition", row.channel_id, "回到消费渠道定义", "back"));
+    appendTokenRelations(relations, "Path应用", row.path_application_id, "path_application_id", "path");
+    appendTokenRelations(relations, "Path实例", row.path_instance_id, "path_instance_id", "path");
+    appendVariablePeekRelations(relations, "载荷", row.decision_payload_ref, "secret");
   }
   if (context.page === "agents" && context.entity === "definition") {
     appendVariablePeekRelations(relations, "密钥", row.credential_ref, "secret");
@@ -2747,6 +3055,9 @@ function formatCell(value, field = "") {
     "snapshot_data",
     "option_chain_data",
     "option_trade_quote_data",
+    "channel_type",
+    "delivery_status",
+    "audit_state",
   ]);
   if (pillFields.has(field) && text.length <= 28 && !text.includes(",")) {
     const tone = /active|ready|启用|核心|高频|yes|partial|confirmed|已验证/i.test(text)
@@ -2762,7 +3073,7 @@ function formatCell(value, field = "") {
 }
 
 function isVariableField(field) {
-  return new Set(["credential_ref", "auth_ref", "api_base_ref", "endpoint_ref"]).has(field);
+  return new Set(["credential_ref", "auth_ref", "api_base_ref", "endpoint_ref", "output_sink_ref", "decision_payload_ref"]).has(field);
 }
 
 function renderVariableCell(text) {
@@ -2805,6 +3116,9 @@ function isReferenceField(field) {
     "horizontal_definition_ids",
     "vertical_definition_ids",
     "path_definition_id",
+    "path_application_id",
+    "path_instance_id",
+    "channel_id",
     "llm_definition_id",
     "primary_sources",
   ]).has(field);
@@ -2823,7 +3137,10 @@ function inferReferenceTarget(token, field) {
   if (/^vco_/.test(token)) return { page: "vertical", entity: "occurrence", search: token };
   if (/^vc_/.test(token)) return { page: "vertical", entity: "definition", search: token };
   if (/^pi_/.test(token)) return { page: "paths", entity: "instance", search: token };
+  if (/^app_path_/.test(token)) return { page: "paths", entity: "application", search: token };
   if (/^path_/.test(token)) return { page: "paths", entity: "definition", search: token };
+  if (/^consumer_/.test(token)) return { page: "consumers", entity: "definition", search: token };
+  if (/^consrec_/.test(token)) return { page: "consumers", entity: "record", search: token };
   if (/^llm_/.test(token)) return { page: "agents", entity: "definition", search: token };
   if (/^src_/.test(token)) return { page: "sources", entity: "definition", search: token };
   if (field === "linked_vertical_types" || field === "generated_vertical_ids" || field === "vertical_definition_ids") {
@@ -2840,6 +3157,15 @@ function inferReferenceTarget(token, field) {
   }
   if (field === "path_ids" || field === "path_definition_id") {
     return { page: "paths", entity: "definition", search: token };
+  }
+  if (field === "path_application_id") {
+    return { page: "paths", entity: "application", search: token };
+  }
+  if (field === "path_instance_id") {
+    return { page: "paths", entity: "instance", search: token };
+  }
+  if (field === "channel_id") {
+    return { page: "consumers", entity: "definition", search: token };
   }
   if (field === "llm_definition_id") {
     return { page: "agents", entity: "definition", search: token };
@@ -3082,11 +3408,12 @@ function renderPathPage(container) {
         current: state.pathEntity,
         options: [
           { key: "definition", label: "定义", code: "path_definition", desc: "转移规则、资金假设和验证计划", count: pathDefinitionRows.length },
+          { key: "application", label: "应用", code: "path_application", desc: "定义 + 交易目标标的 + 监听代码", count: pathApplicationRows.length },
           { key: "instance", label: "实例", code: "path_instance", desc: "实盘走过的节点和结果回放", count: pathInstanceRows.length },
         ],
       })}
       <div class="entity-toolbar">
-        <input class="search-box" id="path-search" type="search" value="${escapeAttr(state.pathSearch)}" placeholder="搜索 ID、标的、节点、状态" />
+        <input class="search-box" id="path-search" type="search" value="${escapeAttr(state.pathSearch)}" placeholder="搜索 ID、节点、标的、状态、监听代码" />
         <span class="field-line">${rows.length} / ${table.rows.length} 条记录${rows.length ? "；点击一行打开右侧画板抽屉" : ""}</span>
       </div>
       <div class="entity-table-wrap">
@@ -3115,7 +3442,7 @@ function renderPathPage(container) {
 
     ${renderSchemaDetails(
       table,
-      state.pathEntity === "definition" ? "定义表字段字典" : "实例表字段字典",
+      getPathSchemaTitle(),
       "Path 是横坐标和纵坐标之间的状态机；点击列表行进入画板。",
     )}
     ${selectedRecord ? renderPathDrawer(selectedRecord) : ""}
@@ -3126,52 +3453,106 @@ function renderPathPage(container) {
 }
 
 function getPathTableConfig() {
-  return state.pathEntity === "definition"
-    ? {
-        title: "path_definition 定义表",
-        desc: "定义一条 path 的转移条件、资金假设和验证计划；节点链和横纵坐标引用在抽屉画板里查看。",
-        schema: pathDefinitionSchema,
-        rows: pathDefinitionRows,
-        visibleColumns: [
-          "id",
-          "name",
-          "path_family",
-          "status",
-          "discovered_by",
-          "flow_hypothesis",
-          "invalidation_rule",
-          "confidence",
-        ],
-      }
-    : {
-        title: "path_instance 实例表",
-        desc: "定义表在实盘某个交易日或事件中实际发生的路径、当前节点、结果和人工复盘状态。",
-        schema: pathInstanceSchema,
-        rows: pathInstanceRows,
-        visibleColumns: [
-          "instance_id",
-          "path_definition_id",
-          "symbols",
-          "trade_date",
-          "activation_state",
-          "current_node_id",
-          "horizontal_occurrence_ids",
-          "vertical_occurrence_ids",
-          "outcome_label",
-          "return_30m",
-          "return_1h",
-          "return_close",
-          "human_review_state",
-        ],
-      };
+  if (state.pathEntity === "definition") {
+    return {
+      title: "path_definition 定义表",
+      desc: "定义一条 path 的转移条件、资金假设和验证计划；节点链和横纵坐标引用在抽屉画板里查看。",
+      schema: pathDefinitionSchema,
+      rows: pathDefinitionRows,
+      visibleColumns: [
+        "id",
+        "name",
+        "path_family",
+        "status",
+        "discovered_by",
+        "flow_hypothesis",
+        "invalidation_rule",
+        "confidence",
+      ],
+    };
+  }
+
+  if (state.pathEntity === "application") {
+    return {
+      title: "path_application 应用表",
+      desc: "把抽象 Path 定义绑定到交易目标标的，并登记 24h 监听代码、运行状态、心跳和应用结论。",
+      schema: pathApplicationSchema,
+      rows: pathApplicationRows,
+      visibleColumns: [
+        "application_id",
+        "path_definition_id",
+        "name",
+        "target_symbol",
+        "runtime_state",
+        "monitor_script",
+        "heartbeat_ref",
+        "application_result_summary",
+        "status",
+      ],
+    };
+  }
+
+  return {
+    title: "path_instance 实例表",
+    desc: "定义表在实盘某个交易日或事件中实际发生的路径、当前节点、结果和人工复盘状态。",
+    schema: pathInstanceSchema,
+    rows: pathInstanceRows,
+    visibleColumns: [
+      "instance_id",
+      "path_definition_id",
+      "symbols",
+      "trade_date",
+      "activation_state",
+      "current_node_id",
+      "horizontal_occurrence_ids",
+      "vertical_occurrence_ids",
+      "outcome_label",
+      "return_30m",
+      "return_1h",
+      "return_close",
+      "human_review_state",
+    ],
+  };
 }
 
 function getPathRecordId(record) {
-  return state.pathEntity === "definition" ? record.id : record.instance_id;
+  if (state.pathEntity === "definition") return record.id;
+  if (state.pathEntity === "application") return record.application_id;
+  return record.instance_id;
 }
 
 function getPathRecordTitle(record) {
-  return state.pathEntity === "definition" ? record.name : record.instance_id;
+  if (state.pathEntity === "definition") return record.name;
+  if (state.pathEntity === "application") return record.name;
+  return record.instance_id;
+}
+
+function getPathSchemaTitle() {
+  if (state.pathEntity === "definition") return "定义表字段字典";
+  if (state.pathEntity === "application") return "应用表字段字典";
+  return "实例表字段字典";
+}
+
+function getPathEntityCode() {
+  if (state.pathEntity === "definition") return "path_definition";
+  if (state.pathEntity === "application") return "path_application";
+  return "path_instance";
+}
+
+function getPathRecordSubtitle(record) {
+  if (state.pathEntity === "definition") return record.description;
+  if (state.pathEntity === "application") return `${record.target_symbol} · ${record.runtime_state} · ${record.monitor_script}`;
+  return record.outcome_label;
+}
+
+function getPathCanvasTitle() {
+  if (state.pathEntity === "definition") return "定义画板";
+  if (state.pathEntity === "application") return "应用监听画板";
+  return "实例回放画板";
+}
+
+function pathApplicationsForDefinition(pathId) {
+  return pathApplicationRows.filter((app) => app.path_definition_id === pathId);
 }
 
 function renderPathDrawer(record) {
@@ -3183,9 +3564,9 @@ function renderPathDrawer(record) {
     <aside class="path-drawer" aria-label="Path 画板抽屉">
       <div class="path-drawer-header">
         <div>
-          <p class="eyebrow">${state.pathEntity === "definition" ? "path_definition" : "path_instance"}</p>
+          <p class="eyebrow">${getPathEntityCode()}</p>
           <h3>${title}</h3>
-          <p>${state.pathEntity === "definition" ? record.description : record.outcome_label}</p>
+          <p>${getPathRecordSubtitle(record)}</p>
         </div>
         <button class="icon-button" type="button" data-close-path-drawer aria-label="关闭抽屉">×</button>
       </div>
@@ -3195,7 +3576,7 @@ function renderPathDrawer(record) {
         </div>
         <div class="path-canvas-shell">
           <div class="path-canvas-header">
-            <strong>${state.pathEntity === "definition" ? "定义画板" : "实例回放画板"}</strong>
+            <strong>${getPathCanvasTitle()}</strong>
             <span>拖动节点可调整视图位置</span>
           </div>
           <div class="path-canvas" id="path-canvas">
@@ -3212,20 +3593,36 @@ function renderPathDrawer(record) {
 }
 
 function renderPathRecordSummary(record) {
-  const rows =
-    state.pathEntity === "definition"
-      ? [
-          ["状态", record.status],
-          ["Path 家族", record.path_family],
-          ["资金假设", record.flow_hypothesis],
-          ["失效条件", record.invalidation_rule],
-        ]
-      : [
-          ["状态", record.activation_state],
-          ["标的", record.symbols],
-          ["当前节点", record.current_node_id],
-          ["人工复盘", record.human_review_state],
-        ];
+  let rows;
+  if (state.pathEntity === "definition") {
+    const applications = pathApplicationsForDefinition(record.id);
+    const applicationStatus = applications.length
+      ? applications.map((app) => `${app.target_symbol}: ${app.runtime_state} (${app.monitor_script})`).join("；")
+      : "暂无应用";
+    rows = [
+      ["状态", record.status],
+      ["Path 家族", record.path_family],
+      ["应用状态", applicationStatus],
+      ["资金假设", record.flow_hypothesis],
+      ["失效条件", record.invalidation_rule],
+    ];
+  } else if (state.pathEntity === "application") {
+    rows = [
+      ["状态", record.runtime_state],
+      ["目标标的", record.target_symbol],
+      ["Path 定义", record.path_definition_id],
+      ["监听代码", record.monitor_script],
+      ["心跳", record.heartbeat_ref],
+      ["PID", record.pid_ref],
+    ];
+  } else {
+    rows = [
+      ["状态", record.activation_state],
+      ["标的", record.symbols],
+      ["当前节点", record.current_node_id],
+      ["人工复盘", record.human_review_state],
+    ];
+  }
 
   return rows
     .map(
@@ -3240,9 +3637,10 @@ function renderPathRecordSummary(record) {
 }
 
 function getPathCanvasConfig() {
-  return state.pathEntity === "definition"
-    ? { nodes: pathCanvasDefinitions, edges: pathCanvasDefinitionEdges }
-    : { nodes: pathCanvasInstances, edges: pathCanvasInstanceEdges };
+  if (state.pathEntity === "definition" || state.pathEntity === "application") {
+    return { nodes: pathCanvasDefinitions, edges: pathCanvasDefinitionEdges };
+  }
+  return { nodes: pathCanvasInstances, edges: pathCanvasInstanceEdges };
 }
 
 function getSelectedPathNode(nodes) {
@@ -3261,7 +3659,8 @@ function renderPathCanvasNode(node) {
 }
 
 function getPathNodePosition(node) {
-  return state.pathCanvasPositions[state.pathEntity][node.id] || { x: node.x, y: node.y };
+  const positions = state.pathCanvasPositions[state.pathEntity] || {};
+  return positions[node.id] || { x: node.x, y: node.y };
 }
 
 function attachPathPageEvents(container) {
@@ -3332,6 +3731,7 @@ function attachPathPageEvents(container) {
       if (!drag || drag.nodeId !== nodeEl.dataset.pathNode) return;
       const nextX = Math.max(12, Math.min(900, drag.originalX + event.clientX - drag.startX));
       const nextY = Math.max(12, Math.min(360, drag.originalY + event.clientY - drag.startY));
+      if (!state.pathCanvasPositions[state.pathEntity]) state.pathCanvasPositions[state.pathEntity] = {};
       state.pathCanvasPositions[state.pathEntity][drag.nodeId] = { x: nextX, y: nextY };
       nodeEl.style.left = `${nextX}px`;
       nodeEl.style.top = `${nextY}px`;
@@ -3356,7 +3756,7 @@ function renderPathInspector(container) {
 function renderPathInspectorContent(selectedNode) {
   const coordinateLinks = renderPathNodeCoordinateLinks(selectedNode);
   return `
-    <p class="eyebrow">${state.pathEntity === "definition" ? "Path Node" : "Observed Node"}</p>
+    <p class="eyebrow">${state.pathEntity === "instance" ? "Observed Node" : "Path Node"}</p>
     <h3>${selectedNode.title}</h3>
     <div class="tag-stack">
       <span class="tag accent">${selectedNode.seq}</span>
@@ -3472,6 +3872,115 @@ function renderArrowMarker() {
       </marker>
     </defs>
   `;
+}
+
+function renderConsumerPage(container) {
+  const table =
+    state.consumerEntity === "definition"
+      ? {
+          title: "consumer_channel_definition 定义表",
+          desc: "定义信号下游怎么消费：记录、通知、模拟仓、实盘审批。每个渠道都要有幂等、风险闸门和审计策略。",
+          schema: consumerChannelDefinitionSchema,
+          rows: consumerChannelDefinitionRows,
+          visibleColumns: [
+            "id",
+            "name",
+            "channel_type",
+            "consumer_stage",
+            "output_sink_ref",
+            "delivery_mode",
+            "risk_gate",
+            "status",
+          ],
+        }
+      : {
+          title: "signal_consumption_record 消费记录表",
+          desc: "记录某次 Path 或 Agent 信号被哪个渠道消费，以及投递状态、耗时、结果和审计状态。",
+          schema: signalConsumptionRecordSchema,
+          rows: signalConsumptionRecordRows,
+          visibleColumns: [
+            "record_id",
+            "channel_id",
+            "path_application_id",
+            "path_instance_id",
+            "signal_id",
+            "signal_type",
+            "symbol",
+            "delivery_status",
+            "consumer_result",
+            "latency_ms",
+            "audit_state",
+          ],
+        };
+
+  const query = state.consumerSearch.trim().toLowerCase();
+  const rows = table.rows.filter((row) => {
+    if (!query) return true;
+    return Object.values(row).join(" ").toLowerCase().includes(query);
+  });
+  table.context = { page: "consumers", entity: state.consumerEntity };
+
+  container.innerHTML = `
+    <section class="entity-panel">
+      <div class="entity-header">
+        <div class="entity-title-block">
+          <h3>${table.title}</h3>
+          <p>${table.desc}</p>
+        </div>
+      </div>
+      ${renderEntitySwitcher({
+        ariaLabel: "消费渠道实体切换",
+        dataName: "consumer-entity",
+        current: state.consumerEntity,
+        options: [
+          { key: "definition", label: "渠道定义", code: "consumer_channel_definition", desc: "日志、通知、模拟仓、live 渠道", count: consumerChannelDefinitionRows.length },
+          { key: "record", label: "消费记录", code: "signal_consumption_record", desc: "每次信号被消费后的结果", count: signalConsumptionRecordRows.length },
+        ],
+      })}
+      <div class="entity-toolbar">
+        <input class="search-box" id="consumer-search" type="search" value="${escapeAttr(state.consumerSearch)}" placeholder="搜索渠道、信号、Path 应用、投递状态" />
+        <span class="field-line">${rows.length} / ${table.rows.length} 条记录</span>
+      </div>
+      <div class="entity-table-wrap">
+        <table class="entity-table consumer-entity-table">
+          <thead>
+            <tr>${table.visibleColumns.map((col) => renderColumnHeader(col, table.schema)).join("")}${renderRelationHeader()}</tr>
+          </thead>
+          <tbody>
+            ${
+              rows.length
+                ? rows
+                    .map(
+                      (row) => `
+                        <tr>${renderTableCells(row, table.visibleColumns)}${renderRelationCell(row, table.context)}</tr>
+                      `,
+                    )
+                    .join("")
+                : `<tr><td colspan="${table.visibleColumns.length + 1}">${table.rows.length ? "没有匹配记录。" : "还没有信号消费记录；Path Runtime 产生信号后会写入这里。"}</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    ${renderSchemaDetails(
+      table,
+      state.consumerEntity === "definition" ? "消费渠道字段字典" : "消费记录字段字典",
+      state.consumerEntity === "definition" ? "定义表描述下游能力与权限，不保存明文 webhook 或券商密钥。" : "记录表保存信号被消费后的状态、耗时和结果，给复盘和风控追踪用。",
+    )}
+  `;
+
+  container.querySelectorAll("[data-consumer-entity]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.consumerEntity = button.dataset.consumerEntity;
+      state.consumerSearch = "";
+      render();
+      syncRoute();
+    });
+  });
+  bindSearchInput(container.querySelector("#consumer-search"), (value) => {
+    state.consumerSearch = value;
+  });
 }
 
 function renderAgentPage(container) {

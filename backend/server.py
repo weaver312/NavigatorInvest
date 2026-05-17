@@ -43,10 +43,25 @@ ENTITY_TABLES = {
         "id_field": "id",
         "fk": {},
     },
+    "path_application": {
+        "seed_key": "pathApplicationRows",
+        "id_field": "application_id",
+        "fk": {"path_definition_id": ("path_definition", "id")},
+    },
     "path_instance": {
         "seed_key": "pathInstanceRows",
         "id_field": "instance_id",
         "fk": {"path_definition_id": ("path_definition", "id")},
+    },
+    "consumer_channel_definition": {
+        "seed_key": "consumerChannelDefinitionRows",
+        "id_field": "id",
+        "fk": {},
+    },
+    "signal_consumption_record": {
+        "seed_key": "signalConsumptionRecordRows",
+        "id_field": "record_id",
+        "fk": {"channel_id": ("consumer_channel_definition", "id")},
     },
     "llm_api_definition": {
         "seed_key": "llmApiDefinitionRows",
@@ -76,7 +91,10 @@ BOOTSTRAP_KEYS = {
     "vertical_coordinate": "verticalDefinitionRows",
     "vertical_coordinate_occurrence": "verticalOccurrenceRows",
     "path_definition": "pathDefinitionRows",
+    "path_application": "pathApplicationRows",
     "path_instance": "pathInstanceRows",
+    "consumer_channel_definition": "consumerChannelDefinitionRows",
+    "signal_consumption_record": "signalConsumptionRecordRows",
     "llm_api_definition": "llmApiDefinitionRows",
     "ai_agent_instance": "aiAgentInstanceRows",
     "data_source_definition": "dataSourceDefinitionRows",
@@ -141,9 +159,32 @@ def init_schema(conn: sqlite3.Connection) -> None:
           updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS path_application (
+          application_id TEXT PRIMARY KEY,
+          path_definition_id TEXT NOT NULL REFERENCES path_definition(id),
+          payload TEXT NOT NULL CHECK (json_valid(payload)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS path_instance (
           instance_id TEXT PRIMARY KEY,
           path_definition_id TEXT NOT NULL REFERENCES path_definition(id),
+          payload TEXT NOT NULL CHECK (json_valid(payload)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS consumer_channel_definition (
+          id TEXT PRIMARY KEY,
+          payload TEXT NOT NULL CHECK (json_valid(payload)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS signal_consumption_record (
+          record_id TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL REFERENCES consumer_channel_definition(id),
           payload TEXT NOT NULL CHECK (json_valid(payload)),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -264,23 +305,25 @@ def seed_database(conn: sqlite3.Connection, reset: bool = False) -> None:
             conn.execute(f"DELETE FROM {table}")
         conn.execute("DELETE FROM app_meta")
 
-    if not reset and not table_is_empty(conn, "horizontal_coordinate"):
-        return
-
     # Definitions first, then dependent instance tables.
     load_order = [
         "horizontal_coordinate",
         "vertical_coordinate",
         "path_definition",
+        "path_application",
+        "consumer_channel_definition",
         "llm_api_definition",
         "data_source_definition",
         "symbol_data_map",
         "horizontal_coordinate_occurrence",
         "vertical_coordinate_occurrence",
         "path_instance",
+        "signal_consumption_record",
         "ai_agent_instance",
     ]
     for table in load_order:
+        if not reset and not table_is_empty(conn, table):
+            continue
         cfg = ENTITY_TABLES[table]
         for row in seed.get(cfg["seed_key"], []):
             insert_payload_with_fk(conn, table, cfg["id_field"], cfg["fk"], row)

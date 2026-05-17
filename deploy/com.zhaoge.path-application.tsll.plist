@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zhaoge.path-application.tsll</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/hong/Library/Application Support/ZhaogePathHarness/monitors/tsll_power_hour_v_rebound_monitor.py</string>
+    <string>--poll-seconds</string>
+    <string>30</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/hong/Library/Application Support/ZhaogePathHarness</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/hong/Library/Application Support/ZhaogePathHarness/runtime/path_applications/app_path_power_hour_v_rebound_tsll/launchd.out</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/hong/Library/Application Support/ZhaogePathHarness/runtime/path_applications/app_path_power_hour_v_rebound_tsll/launchd.err</string>
+</dict>
+</plist>

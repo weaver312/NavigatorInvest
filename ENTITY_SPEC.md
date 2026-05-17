@@ -9,9 +9,10 @@
 3. 实例表保存某个定义在实盘或回放中的实际发生，但原型样例仍使用“周一”“周五”“事件后”等框架语言；真实时间戳应进入后续回放库或证据库。
 4. 横坐标必须保存原始时间口径，例如 UTC+8、ET、event_timezone，并显式保存夏令时规则。
 5. 纵坐标不能只存裸价格，必须保存价格来源窗口、计算方法、有效期和失效条件。
-6. Path 定义只串联定义级实体；Path 实例只串联实例级实体。
-7. credential_ref、auth_ref、endpoint_ref 只保存引用，不保存明文密钥。页面展示时必须脱敏。
-8. 所有写入必须 no-lookahead：字段 `known_at_rule` 或实例的 known_at 框架必须能说明当时是否已知。
+6. Path 定义只串联定义级实体；Path 应用表示“定义 + 交易目标标的 + 运行代码”；Path 实例只串联实例级实体。
+7. 消费渠道只消费信号输出，不直接改变 Path 定义；任何通知、模拟仓或 live 交易都必须能回链到 `signal_consumption_record`。
+8. credential_ref、auth_ref、endpoint_ref、output_sink_ref 只保存引用，不保存明文密钥、webhook 或券商 token。页面展示时必须脱敏。
+9. 所有写入必须 no-lookahead：字段 `known_at_rule` 或实例的 known_at 框架必须能说明当时是否已知。
 
 ## 2. 实体关系图
 
@@ -20,7 +21,11 @@ erDiagram
   horizontal_coordinate ||--o{ horizontal_coordinate_occurrence : instantiates
   vertical_coordinate ||--o{ vertical_coordinate_occurrence : instantiates
   horizontal_coordinate }o--o{ vertical_coordinate : "depends_or_generates"
-  path_definition ||--o{ path_instance : instantiates
+  path_definition ||--o{ path_application : applies_to
+  path_application ||--o{ path_instance : emits
+  consumer_channel_definition ||--o{ signal_consumption_record : consumes
+  path_application ||--o{ signal_consumption_record : emits_signal
+  path_instance ||--o{ signal_consumption_record : relates_to
   horizontal_coordinate }o--o{ path_definition : uses
   vertical_coordinate }o--o{ path_definition : uses
   horizontal_coordinate_occurrence }o--o{ path_instance : triggers
@@ -39,7 +44,10 @@ erDiagram
 | 纵坐标定义 | `vertical_coordinate` | `id` | 定义低点、高点、缺口、强平低点、IV、权利金等价格结构。 |
 | 纵坐标实例 | `vertical_coordinate_occurrence` | `occurrence_id` | 某标的、某窗口中计算出的具体价格/权利金/IV。 |
 | Path 定义 | `path_definition` | `id` | 串联横坐标定义、纵坐标定义、资金假设、转移条件、验证计划和发现者。 |
+| Path 应用 | `path_application` | `application_id` | Path 定义 + 交易目标标的 + 参数档案 + 24h 监听代码和运行状态。 |
 | Path 实例 | `path_instance` | `instance_id` | Path 定义在实盘/回放中的实际节点序列、结果和复盘状态。 |
+| 消费渠道定义 | `consumer_channel_definition` | `id` | 定义 Path/Agent 信号如何被记录、通知、写模拟仓或进入 live 审批。 |
+| 信号消费记录 | `signal_consumption_record` | `record_id` | 记录某个信号被某个消费渠道消费后的状态、耗时、结果和审计状态。 |
 | 模型 API 定义 | `llm_api_definition` | `id` | 定义模型供应商、模型名、协议、鉴权引用和默认参数。 |
 | Agent 实例 | `ai_agent_instance` | `agent_id` | 模型定义 + prompt + workflow + 触发器 + 输入输出权限。 |
 | 数据源头定义 | `data_source_definition` | `id` | 定义数据源从哪里来、怎么接、提供哪些数据域。 |
@@ -60,9 +68,13 @@ erDiagram
 | `vertical_coordinate_occurrence` | `path_ids` | `path_definition` | N:N | 只允许引用 Path 定义 ID。 |
 | `path_definition` | `horizontal_definition_ids` | `horizontal_coordinate` | N:N | Path 定义只引用横坐标定义。 |
 | `path_definition` | `vertical_definition_ids` | `vertical_coordinate` | N:N | Path 定义只引用纵坐标定义。 |
+| `path_application` | `path_definition_id` | `path_definition` | N:1 | 每个应用必须回指一个 Path 定义，并在应用层绑定交易目标标的和监听代码。 |
 | `path_instance` | `path_definition_id` | `path_definition` | N:1 | 每个实例必须回指 Path 定义。 |
 | `path_instance` | `horizontal_occurrence_ids` | `horizontal_coordinate_occurrence` | N:N | Path 实例只引用横坐标实例。 |
 | `path_instance` | `vertical_occurrence_ids` | `vertical_coordinate_occurrence` | N:N | Path 实例只引用纵坐标实例，不能写定义 ID。 |
+| `signal_consumption_record` | `channel_id` | `consumer_channel_definition` | N:1 | 每条消费记录必须回指一个消费渠道定义。 |
+| `signal_consumption_record` | `path_application_id` | `path_application` | N:1 optional | 如果信号来自 Path 应用，必须记录应用 ID。 |
+| `signal_consumption_record` | `path_instance_id` | `path_instance` | N:1 optional | 如果信号已经生成 Path 实例，必须记录实例 ID。 |
 | `ai_agent_instance` | `llm_definition_id` | `llm_api_definition` | N:1 | Agent 必须绑定已登记模型定义。 |
 | `symbol_data_map` | `primary_sources` | `data_source_definition` | N:N | 只能引用已登记的数据源头定义。 |
 
@@ -70,7 +82,7 @@ erDiagram
 
 写入任何实体前，必须执行以下校验：
 
-1. 检查主键是否存在、格式是否符合表前缀，例如 `hc_`、`hco_`、`vc_`、`vco_`、`path_`、`pi_`、`llm_`、`agent_`、`src_`。
+1. 检查主键是否存在、格式是否符合表前缀，例如 `hc_`、`hco_`、`vc_`、`vco_`、`path_`、`app_path_`、`pi_`、`consumer_`、`consrec_`、`llm_`、`agent_`、`src_`。
 2. 检查所有关系字段，拆分逗号、顿号、斜杠后的每个 token。
 3. 根据字段规则找到目标表。
 4. 在目标表按主键精确查找 token。
