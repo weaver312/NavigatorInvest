@@ -238,9 +238,9 @@ def read_seed() -> dict:
     return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
-def table_is_empty(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
-    return int(row["count"]) == 0
+def payload_exists(conn: sqlite3.Connection, table: str, id_field: str, value: str) -> bool:
+    row = conn.execute(f"SELECT 1 FROM {table} WHERE {id_field} = ?", (value,)).fetchone()
+    return row is not None
 
 
 def insert_payload(conn: sqlite3.Connection, table: str, id_field: str, row: dict) -> None:
@@ -322,10 +322,11 @@ def seed_database(conn: sqlite3.Connection, reset: bool = False) -> None:
         "ai_agent_instance",
     ]
     for table in load_order:
-        if not reset and not table_is_empty(conn, table):
-            continue
         cfg = ENTITY_TABLES[table]
         for row in seed.get(cfg["seed_key"], []):
+            row_id = str(row.get(cfg["id_field"], "")).strip()
+            if not reset and row_id and payload_exists(conn, table, cfg["id_field"], row_id):
+                continue
             insert_payload_with_fk(conn, table, cfg["id_field"], cfg["fk"], row)
             if table == "symbol_data_map":
                 upsert_symbol_datasets(conn, row)
