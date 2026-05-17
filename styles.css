@@ -81,13 +81,39 @@ button {
 }
 
 .brand-mark svg {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   fill: none;
   stroke: #8fe0c8;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.brand-mark .mark-ring {
+  stroke: rgba(143, 224, 200, 0.94);
+}
+
+.brand-mark .mark-axis {
+  stroke: rgba(216, 232, 226, 0.72);
+  stroke-width: 1.7;
+}
+
+.brand-mark .mark-route {
+  stroke: #8fe0c8;
+  stroke-width: 2.3;
+}
+
+.brand-mark .mark-arrow {
+  fill: #d8a545;
+  stroke: #d8a545;
+  stroke-width: 1.4;
+}
+
+.brand-mark .mark-node {
+  fill: #111b19;
+  stroke: #8fe0c8;
+  stroke-width: 2;
 }
 
 .brand h1,
