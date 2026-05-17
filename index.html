@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>横纵坐标 Path Harness</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M7 21h18M7 11h18M10 24l12-16" />
+              <circle cx="10" cy="21" r="2.3" />
+              <circle cx="22" cy="11" r="2.3" />
+            </svg>
+          </div>
+          <div>
+            <p class="eyebrow">Market Path Harness</p>
+            <h1>坐标武器库</h1>
+          </div>
+        </div>
+
+        <nav id="nav" class="nav-list"></nav>
+
+        <div class="sidebar-footer">
+          <p class="eyebrow">当前版本</p>
+          <strong id="app-version">0.1 alpha</strong>
+          <span id="version-caption">本地 API + SQLite 数据库已接入。</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p id="page-kicker" class="eyebrow">系统总览</p>
+            <h2 id="page-title">横坐标库</h2>
+            <p id="page-summary"></p>
+          </div>
+          <div id="runtime-status" class="status-pill" title="本地后端与 SQLite 数据库状态">0.1 alpha</div>
+        </header>
+
+        <section class="framework-band" aria-label="系统框架">
+          <div class="framework-node">
+            <span>01</span>
+            <strong>原始信号</strong>
+            <p>发言、截图、行情、事件</p>
+          </div>
+          <div class="framework-line" aria-hidden="true"></div>
+          <div class="framework-node">
+            <span>02</span>
+            <strong>横纵坐标</strong>
+            <p>时间事件与价格结构</p>
+          </div>
+          <div class="framework-line" aria-hidden="true"></div>
+          <div class="framework-node">
+            <span>03</span>
+            <strong>资金状态</strong>
+            <p>吸筹、派发、强平、回补</p>
+          </div>
+          <div class="framework-line" aria-hidden="true"></div>
+          <div class="framework-node">
+            <span>04</span>
+            <strong>Path 候选</strong>
+            <p>可证伪的市场路径</p>
+          </div>
+          <div class="framework-line" aria-hidden="true"></div>
+          <div class="framework-node">
+            <span>05</span>
+            <strong>人工验证</strong>
+            <p>交易员审查后入库</p>
+          </div>
+        </section>
+
+        <section id="page-content" class="page-content"></section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

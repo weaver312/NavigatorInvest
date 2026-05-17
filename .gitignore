@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Runtime database; regenerate from data/seed_data.json on first boot.
+data/*.sqlite
+data/*.sqlite-*
+
+# Local visual QA captures.
+screenshot-*.png
+
+# Local editor and environment noise.
+.env
+.venv/
+node_modules/
